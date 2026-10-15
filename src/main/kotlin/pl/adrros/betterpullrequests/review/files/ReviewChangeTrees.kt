@@ -1,10 +1,7 @@
 package pl.adrros.betterpullrequests.review.files
 
-import com.intellij.collaboration.ui.codereview.changes.CodeReviewChangeListComponentFactory
 import com.intellij.collaboration.util.RefComparisonChange
-import com.intellij.ide.DataManager
 import com.intellij.openapi.components.service
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.ui.ExperimentalUI
@@ -19,70 +16,63 @@ import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics
 import java.awt.Graphics2D
-import java.beans.PropertyChangeListener
+import java.awt.Rectangle
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import javax.swing.JComponent
 import javax.swing.JTree
-import javax.swing.SwingUtilities
-import javax.swing.plaf.TreeUI
 
 /**
  * Marks the file open in the editor inside the pull request's change tree, so the reader always knows which
- * changed file they are in and can tick it as viewed. The platform paints the tree's rows itself (selection,
- * hover, file colours); a thin UI subclass adds a translucent tint and a bar at the left edge on top of them,
- * so the mark stays visible whatever else the row shows. The renderer is untouched.
+ * changed file they are in and can tick it as viewed. The mark is a transparent child component laid over the
+ * tree: Swing paints children last, so it shows on top of selection, hover and file colours, and it never takes
+ * a mouse event. The tree, its UI and its renderer stay untouched.
  */
 object ReviewChangeTrees {
     const val INSTALLED = "BetterPullRequests.currentFileHighlight"
     private const val REVIEW_TREE_FACTORY = "com.intellij.collaboration.ui.codereview.changes.CodeReviewChangeListComponentFactory"
     private const val BAR_WIDTH = 3
-    private const val TINT_ALPHA = 70
+    private const val TINT_ALPHA = 60
 
     /** Purple, overridable by themes; the tint is drawn with alpha, so it reads over selection and file colours too. */
     val HIGHLIGHT: Color = JBColor.namedColor("BetterPullRequests.CurrentFile.background", JBColor(Color(0x8B, 0x5C, 0xF6), Color(0xA7, 0x8B, 0xFA)))
 
-    private val installed = ContainerUtil.createWeakSet<ChangesTree>()
+    private val installed = ContainerUtil.createWeakSet<JTree>()
 
-    /**
-     * The change tree the collaboration tools build for a code review (GitHub and GitLab alike): recognised by
-     * the data key it publishes, with the factory's class name as a fallback.
-     */
-    fun isReviewChangesTree(component: Component): Boolean {
-        if (component !is ChangesTree) return false
-        if (component.javaClass.name.startsWith(REVIEW_TREE_FACTORY)) return true
-        return runCatching { DataManager.getInstance().getDataContext(component).getData(CodeReviewChangeListComponentFactory.SELECTED_CHANGES) }.getOrNull() != null
-    }
+    /** The change tree the collaboration tools build for a code review (GitHub and GitLab alike). */
+    fun isReviewChangesTree(component: Component): Boolean =
+        component is ChangesTree && component.javaClass.name.startsWith(REVIEW_TREE_FACTORY)
 
     fun watch(tree: ChangesTree) {
         (tree.getClientProperty(INSTALLED) as? JComponent)?.let { if (DecorationOwner.owns(it)) return }
-        install(tree)
+        install(tree, tree.project.service<CurrentReviewFile>())
     }
 
-    fun install(tree: ChangesTree) {
-        val installation = Installation(tree)
-        DecorationOwner.mark(installation)
-        tree.putClientProperty(INSTALLED, installation)
+    fun install(tree: JTree, currentFile: CurrentReviewFile) {
+        (tree.getClientProperty(INSTALLED) as? JComponent)?.let { tree.remove(it) } // left by a version unloaded without restart
+        val overlay = CurrentFileOverlay(tree, currentFile)
+        tree.putClientProperty(INSTALLED, overlay)
+        tree.add(overlay)
+        tree.addComponentListener(overlay.resizeListener)
         synchronized(installed) { installed.add(tree) }
-        tree.project.service<CurrentReviewFile>().track(tree)
-        applyUi(tree)
-        tree.addPropertyChangeListener("UI", installation.listener)
+        currentFile.track(tree)
+        tree.repaint()
     }
 
-    fun uninstall(tree: ChangesTree) {
-        (tree.getClientProperty(INSTALLED) as? Installation)?.let { tree.removePropertyChangeListener("UI", it.listener) }
+    fun uninstall(tree: JTree) {
+        val overlay = tree.getClientProperty(INSTALLED) as? JComponent
         tree.putClientProperty(INSTALLED, null)
+        if (overlay != null) {
+            (overlay as? CurrentFileOverlay)?.let { tree.removeComponentListener(it.resizeListener); it.currentFile.untrack(tree) }
+            tree.remove(overlay)
+        }
         synchronized(installed) { installed.remove(tree) }
-        if (!tree.project.isDisposed) tree.project.service<CurrentReviewFile>().untrack(tree)
-        if (tree.ui is HighlightingTreeUI) tree.updateUI()
+        tree.repaint()
     }
 
     /** Trees in hidden tabs are not reachable from any window; the registry remembers them for unload. */
     fun uninstallAll() {
         synchronized(installed) { installed.toList() }.forEach { tree -> runCatching { uninstall(tree) } }
-    }
-
-    private fun applyUi(tree: ChangesTree) {
-        if (tree.ui is HighlightingTreeUI) return
-        tree.setUI(HighlightingTreeUI(tree.project))
     }
 
     /** The file a change-tree node stands for; directory nodes carry a directory path and never match a file. */
@@ -92,58 +82,54 @@ object ReviewChangeTrees {
         else -> null
     }
 
-    /**
-     * What one plugin version attached to a tree. The listener re-applies the highlighting UI after a theme
-     * change, but only while this installation is still the tree's current one: a later plugin version that
-     * replaced it must not be fought.
-     */
-    class Installation(private val tree: ChangesTree) : JComponent() {
-        val listener: PropertyChangeListener = PropertyChangeListener { event ->
-            if (tree.getClientProperty(INSTALLED) !== this) {
-                tree.removePropertyChangeListener("UI", this.listener)
-                return@PropertyChangeListener
-            }
-            val newUi = event.newValue as? TreeUI ?: return@PropertyChangeListener
-            if (newUi is HighlightingTreeUI) return@PropertyChangeListener
-            SwingUtilities.invokeLater { if (tree.getClientProperty(INSTALLED) === this) applyUi(tree) }
-        }
-    }
-
-    class HighlightingTreeUI(project: Project) : DefaultTreeUI() {
-        private val currentFile: CurrentReviewFile? = project.takeUnless { it.isDisposed }?.service<CurrentReviewFile>()
-
-        override fun paint(g: Graphics, c: JComponent) {
-            super.paint(g, c)
-            paintCurrentFile(g, c as JTree)
+    class CurrentFileOverlay(private val tree: JTree, val currentFile: CurrentReviewFile) : JComponent() {
+        val resizeListener = object : ComponentAdapter() {
+            override fun componentResized(e: ComponentEvent) = fitTree()
         }
 
-        private fun paintCurrentFile(g: Graphics, tree: JTree) {
-            val current = currentFile?.path ?: return
-            val clip = g.clipBounds ?: tree.visibleRect
+        init {
+            isOpaque = false
+            isFocusable = false
+            DecorationOwner.mark(this)
+            fitTree()
+        }
+
+        private fun fitTree() {
+            bounds = Rectangle(0, 0, tree.width, tree.height)
+        }
+
+        /** Never a mouse or tooltip target: clicks go to the tree underneath. */
+        override fun contains(x: Int, y: Int): Boolean = false
+
+        override fun paintComponent(g: Graphics) {
+            val current = currentFile.path ?: return
+            val visible = tree.visibleRect
+            val clip = g.clipBounds ?: visible
             val first = tree.getClosestRowForLocation(0, clip.y).coerceAtLeast(0)
             val last = tree.getClosestRowForLocation(0, clip.y + clip.height - 1).coerceAtLeast(first)
             for (row in first..last) {
                 val path = tree.getPathForRow(row) ?: continue
                 if (pathOf(TreeUtil.getLastUserObject(path)) != current) continue
                 val bounds = tree.getRowBounds(row) ?: continue
-                val g2 = g.create() as Graphics2D
-                try {
-                    val tint = Color(HIGHLIGHT.red, HIGHLIGHT.green, HIGHLIGHT.blue, TINT_ALPHA)
-                    val inset = if (ExperimentalUI.isNewUI()) JBUI.scale(SELECTION_INSET) else 0
-                    val arc = if (ExperimentalUI.isNewUI()) JBUI.CurrentTheme.Tree.ARC.get().toDouble() else 0.0
-                    g2.color = tint
-                    RectanglePainter2D.FILL.paint(g2, inset.toDouble(), bounds.y.toDouble(), (tree.width - 2 * inset).toDouble(), bounds.height.toDouble(), arc)
-                    g2.color = HIGHLIGHT
-                    g2.fillRect(0, bounds.y, JBUI.scale(BAR_WIDTH), bounds.height)
-                } finally {
-                    g2.dispose()
-                }
+                paintMark(g, bounds, visible)
             }
         }
 
-        companion object {
-            /** The horizontal offset the new UI uses for its rounded selection. */
-            private const val SELECTION_INSET = 12
+        private fun paintMark(g: Graphics, row: Rectangle, visible: Rectangle) {
+            val g2 = g.create() as Graphics2D
+            try {
+                val newUi = ExperimentalUI.isNewUI()
+                val inset = if (newUi) JBUI.scale(DefaultTreeUI.HORIZONTAL_SELECTION_OFFSET) else 0
+                val arc = if (newUi) JBUI.CurrentTheme.Tree.ARC.get().toDouble() else 0.0
+                g2.color = Color(HIGHLIGHT.red, HIGHLIGHT.green, HIGHLIGHT.blue, TINT_ALPHA)
+                RectanglePainter2D.FILL.paint(
+                    g2, (visible.x + inset).toDouble(), row.y.toDouble(), (visible.width - 2 * inset).toDouble(), row.height.toDouble(), arc,
+                )
+                g2.color = HIGHLIGHT
+                g2.fillRect(visible.x, row.y, JBUI.scale(BAR_WIDTH), row.height)
+            } finally {
+                g2.dispose()
+            }
         }
     }
 }

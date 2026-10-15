@@ -5,7 +5,6 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.vcs.LocalFilePath
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.openapi.vcs.history.ShortVcsRevisionNumber
-import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.ui.treeStructure.Tree
 import java.awt.image.BufferedImage
@@ -45,14 +44,16 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertFalse(ReviewChangeTrees.isReviewChangesTree(Tree()))
     }
 
+    private fun overlays(tree: JTree) = tree.components.filterIsInstance<ReviewChangeTrees.CurrentFileOverlay>()
+
     private fun treeWith(vararg nodes: DefaultMutableTreeNode): Tree {
         val root = DefaultMutableTreeNode("root")
         nodes.forEach(root::add)
         return Tree(DefaultTreeModel(root)).apply {
             isRootVisible = false
-            setUI(ReviewChangeTrees.HighlightingTreeUI(project))
             setSize(300, 120)
             doLayout()
+            ReviewChangeTrees.install(this, project.service<CurrentReviewFile>())
         }
     }
 
@@ -78,7 +79,6 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         val currentMid = image.getRGB(tree.width / 2, currentRow.y + currentRow.height / 2) and 0xFFFFFF
         val otherMid = image.getRGB(tree.width / 2, otherRow.y + otherRow.height / 2) and 0xFFFFFF
         assertEquals("bar at the left edge", bar, image.getRGB(1, currentRow.y + currentRow.height / 2) and 0xFFFFFF)
-        assertNotSame("tint over the row", otherMid, currentMid)
         assertTrue("tint over the row", otherMid != currentMid)
         assertTrue("other row has no bar", (image.getRGB(1, otherRow.y + otherRow.height / 2) and 0xFFFFFF) != bar)
     }
@@ -96,38 +96,38 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertEquals(com.intellij.vcsUtil.VcsUtil.getFilePath(file), project.service<CurrentReviewFile>().path)
     }
 
-    fun `test install survives a look-and-feel reset and uninstall gives the platform UI back`() {
+    fun `test the overlay follows the tree size, never takes clicks and goes away on uninstall`() {
         val tree = object : ChangesTree(project, false, false) {
             override fun rebuildTree() {}
         }
-        ReviewChangeTrees.install(tree)
-        assertTrue(tree.ui is ReviewChangeTrees.HighlightingTreeUI)
+        tree.setSize(200, 100)
+        ReviewChangeTrees.install(tree, project.service<CurrentReviewFile>())
+        val overlay = tree.getClientProperty(ReviewChangeTrees.INSTALLED) as ReviewChangeTrees.CurrentFileOverlay
+        assertEquals(listOf(overlay), overlays(tree))
+        assertEquals(java.awt.Rectangle(0, 0, 200, 100), overlay.bounds)
+        assertFalse(overlay.contains(10, 10))
+
+        tree.setSize(400, 300)
+        tree.dispatchEvent(java.awt.event.ComponentEvent(tree, java.awt.event.ComponentEvent.COMPONENT_RESIZED))
+        assertEquals(java.awt.Rectangle(0, 0, 400, 300), overlay.bounds)
 
         tree.updateUI()
-        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
-        assertTrue("re-applied after the look-and-feel reset", tree.ui is ReviewChangeTrees.HighlightingTreeUI)
+        assertEquals("a look-and-feel reset keeps the overlay", listOf(overlay), overlays(tree))
 
         ReviewChangeTrees.uninstall(tree)
-        assertFalse(tree.ui is ReviewChangeTrees.HighlightingTreeUI)
+        assertTrue(overlays(tree).isEmpty())
         assertNull(tree.getClientProperty(ReviewChangeTrees.INSTALLED))
-        tree.updateUI()
-        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
-        assertFalse("stays off after uninstall", tree.ui is ReviewChangeTrees.HighlightingTreeUI)
     }
 
-    fun `test an installation from another plugin version steps aside`() {
+    fun `test an overlay from another plugin version is replaced`() {
         val tree = object : ChangesTree(project, false, false) {
             override fun rebuildTree() {}
         }
-        ReviewChangeTrees.install(tree)
-        val old = tree.getClientProperty(ReviewChangeTrees.INSTALLED) as ReviewChangeTrees.Installation
-        ReviewChangeTrees.install(tree) // a newer version takes over
-        assertNotSame(old, tree.getClientProperty(ReviewChangeTrees.INSTALLED))
-
-        tree.updateUI()
-        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
-        assertTrue(tree.ui is ReviewChangeTrees.HighlightingTreeUI)
-        assertFalse("the old listener removed itself", tree.getPropertyChangeListeners("UI").contains(old.listener))
+        ReviewChangeTrees.install(tree, project.service<CurrentReviewFile>())
+        val old = overlays(tree).single()
+        ReviewChangeTrees.install(tree, project.service<CurrentReviewFile>()) // a newer version takes over
+        assertEquals(1, overlays(tree).size)
+        assertNotSame(old, overlays(tree).single())
         ReviewChangeTrees.uninstall(tree)
     }
 }

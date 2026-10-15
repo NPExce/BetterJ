@@ -57,8 +57,8 @@ Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbo
   comment, the `Dummy.md` file behind the comment editor, the layout of the comment field's action row).
   A major IDE update may need a small follow-up.
 - Uploads go to github.com only; a GitHub Enterprise account gets an error balloon instead.
-- The current-file mark swaps the change tree's UI delegate for a subclass of the platform's tree UI and recognises
-  the tree by the data key it publishes (class name as fallback); an IDE update may need a follow-up.
+- The current-file mark is a transparent overlay added to the change tree, recognised by the class name of the
+  tree the collaboration tools build; an IDE update may need a follow-up.
 - The *Review…* button is recognised by the shape of the details action row, which GitLab merge requests share;
   it is only added where a GitHub pull request is in the context. The submit flow reuses the GitHub plugin's
   review model through its pluggable popup handler, an internal API.

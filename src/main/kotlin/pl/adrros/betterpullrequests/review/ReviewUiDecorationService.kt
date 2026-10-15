@@ -122,7 +122,7 @@ class ReviewUiDecorationService : Disposable {
 
     companion object {
         /** Markers whose value is the injected component. */
-        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED)
+        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED, ReviewChangeTrees.INSTALLED)
         val ALL_FLAGS: List<String> = INJECTED_FLAGS + CommentCopyButtons.WATCHED
 
         /** Listener code runs inside AWT event dispatch; an exception there would be reported as an IDE error. */

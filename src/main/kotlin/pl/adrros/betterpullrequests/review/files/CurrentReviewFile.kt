@@ -10,7 +10,6 @@ import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.vcsUtil.VcsUtil
-import org.jetbrains.annotations.TestOnly
 import javax.swing.JTree
 
 /**
@@ -28,7 +27,6 @@ class CurrentReviewFile(private val project: Project) {
 
     fun update(file: VirtualFile?) = update(file?.let { VcsUtil.getFilePath(it) })
 
-    @TestOnly
     fun update(path: FilePath?) {
         initialised = true
         if (path == this.path) return
