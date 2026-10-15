@@ -27,6 +27,7 @@ class InsertEmojiAction : DumbAwareAction() {
     }
 
     private fun insertAtCaret(project: Project, editor: Editor, text: String) {
+        if (editor.isDisposed) return
         WriteCommandAction.runWriteCommandAction(project) {
             EditorModificationUtil.insertStringAtCaret(editor, text)
         }

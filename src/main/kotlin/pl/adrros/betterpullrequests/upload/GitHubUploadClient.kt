@@ -1,56 +1,54 @@
 package pl.adrros.betterpullrequests.upload
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import java.net.URI
+import com.intellij.util.io.HttpRequests
+import java.net.HttpURLConnection
 import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
 
 /**
  * Talks to GitHub the way the web UI's attachment box does. `uploads.github.com/user-attachments/assets`
  * is not documented, but it accepts a regular OAuth or personal token and returns a
  * `github.com/user-attachments/assets/...` URL that renders everywhere a pasted screenshot would.
+ * Requests go through the IDE's HTTP stack, so proxy and certificate settings apply.
  */
 class GitHubUploadClient(
     private val apiUrl: String = DEFAULT_API_URL,
     private val uploadsUrl: String = DEFAULT_UPLOADS_URL,
-    private val client: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build(),
 ) {
     private val json = ObjectMapper()
 
     fun fetchRepositoryId(token: String, owner: String, repository: String): Long {
-        val request = HttpRequest.newBuilder(URI.create("$apiUrl/repos/${encode(owner)}/${encode(repository)}"))
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/vnd.github+json")
-            .GET()
-            .build()
-        val response = send(request)
-        return json.readTree(response.body()).path("id").asLong().takeIf { it > 0 }
+        val body = HttpRequests.request("$apiUrl/repos/${encode(owner)}/${encode(repository)}")
+            .accept("application/vnd.github+json")
+            .tuner { it.setRequestProperty("Authorization", "Bearer $token") }
+            .throwStatusCodeException(false)
+            .connect { request -> readOrFail(request) }
+        return json.readTree(body).path("id").asLong().takeIf { it > 0 }
             ?: throw AttachmentUploadException("GitHub returned no repository id for $owner/$repository")
     }
 
     fun upload(token: String, repositoryId: Long, fileName: String, contentType: String, bytes: ByteArray): String {
         val query = "name=${encode(fileName)}&content_type=${encode(contentType)}&repository_id=$repositoryId"
-        val request = HttpRequest.newBuilder(URI.create("$uploadsUrl/user-attachments/assets?$query"))
-            .header("Authorization", "Bearer $token")
-            .header("Accept", "application/json")
-            .header("Content-Type", contentType)
-            .timeout(Duration.ofMinutes(2))
-            .POST(HttpRequest.BodyPublishers.ofByteArray(bytes))
-            .build()
-        val response = send(request)
-        return json.readTree(response.body()).path("url").asText().takeIf { it.isNotEmpty() }
-            ?: throw AttachmentUploadException("GitHub returned no attachment url: ${response.body().take(200)}")
+        val body = HttpRequests.post("$uploadsUrl/user-attachments/assets?$query", contentType)
+            .accept("application/json")
+            .readTimeout(UPLOAD_TIMEOUT_MS)
+            .tuner { it.setRequestProperty("Authorization", "Bearer $token") }
+            .throwStatusCodeException(false)
+            .connect { request ->
+                request.write(bytes)
+                readOrFail(request)
+            }
+        return json.readTree(body).path("url").asText().takeIf { it.isNotEmpty() }
+            ?: throw AttachmentUploadException("GitHub returned no attachment url: ${body.take(200)}")
     }
 
-    private fun send(request: HttpRequest): HttpResponse<String> {
-        val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() !in 200..299) {
-            throw AttachmentUploadException("GitHub answered with HTTP ${response.statusCode()}: ${response.body().take(300)}")
+    private fun readOrFail(request: HttpRequests.Request): String {
+        val status = (request.connection as HttpURLConnection).responseCode
+        if (status !in 200..299) {
+            val error = runCatching { request.readError() }.getOrNull().orEmpty()
+            throw AttachmentUploadException("GitHub answered with HTTP $status: ${error.take(300)}")
         }
-        return response
+        return request.readString()
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
@@ -58,5 +56,6 @@ class GitHubUploadClient(
     companion object {
         const val DEFAULT_API_URL = "https://api.github.com"
         const val DEFAULT_UPLOADS_URL = "https://uploads.github.com"
+        private const val UPLOAD_TIMEOUT_MS = 120_000
     }
 }

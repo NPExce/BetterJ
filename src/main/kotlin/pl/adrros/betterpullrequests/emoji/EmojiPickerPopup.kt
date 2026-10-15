@@ -130,11 +130,19 @@ class EmojiPickerPopup(
                         e.consume()
                         focusGrid(allGrid)
                     }
-                    e.keyChar.isLetterOrDigit() || e.keyCode == KeyEvent.VK_BACK_SPACE -> {
+                    e.keyCode == KeyEvent.VK_BACK_SPACE -> {
+                        e.consume()
+                        searchField.text = searchField.text.dropLast(1)
                         searchField.requestFocusInWindow()
-                        searchField.dispatchEvent(e)
                     }
                 }
+            }
+
+            override fun keyTyped(e: KeyEvent) {
+                if (!e.keyChar.isLetterOrDigit() || e.isControlDown || e.isMetaDown) return
+                e.consume()
+                searchField.text = searchField.text + e.keyChar
+                searchField.requestFocusInWindow()
             }
         })
     }

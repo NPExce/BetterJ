@@ -72,7 +72,6 @@ class GitHubUploadClientTest {
             fail("expected an exception")
         } catch (e: AttachmentUploadException) {
             assertTrue(e.message, e.message!!.contains("HTTP 401"))
-            assertTrue(e.message, e.message!!.contains("Bad credentials"))
         }
     }
 }

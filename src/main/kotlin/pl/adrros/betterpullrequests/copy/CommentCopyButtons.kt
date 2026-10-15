@@ -1,15 +1,16 @@
 package pl.adrros.betterpullrequests.copy
 
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.components.service
 import com.intellij.ui.components.panels.ListLayout
 import com.intellij.util.ui.InlineIconButton
 import com.intellij.util.ui.UIUtil
 import pl.adrros.betterpullrequests.BetterPullRequestsBundle
+import pl.adrros.betterpullrequests.review.Retrying
+import pl.adrros.betterpullrequests.review.ReviewUiDecorationService
 import java.awt.Component
 import java.awt.Container
 import java.awt.event.ActionListener
-import java.awt.event.HierarchyEvent
-import java.awt.event.HierarchyListener
 import javax.swing.JComponent
 import javax.swing.JEditorPane
 import javax.swing.JPanel
@@ -28,15 +29,8 @@ object CommentCopyButtons {
     /** Call when a comment pane joins a container; the button lands once the whole comment is on screen. */
     fun watch(pane: JEditorPane) {
         if (pane.getClientProperty(WATCHED) != null) return
-        pane.putClientProperty(WATCHED, true)
-        if (pane.isDisplayable && install(pane)) return
-        pane.addHierarchyListener(object : HierarchyListener {
-            override fun hierarchyChanged(e: HierarchyEvent) {
-                if (e.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong() == 0L || !pane.isDisplayable) return
-                pane.removeHierarchyListener(this)
-                install(pane)
-            }
-        })
+        service<ReviewUiDecorationService>().flag(pane, WATCHED)
+        Retrying.whenDisplayable(pane) { !pane.isDisplayable || install(pane) }
     }
 
     fun install(pane: JEditorPane): Boolean {
@@ -49,6 +43,7 @@ object CommentCopyButtons {
         }
         actions.add(button)
         actions.putClientProperty(INSTALLED, button)
+        service<ReviewUiDecorationService>().track(actions, button, INSTALLED)
         actions.revalidate()
         actions.repaint()
         return true

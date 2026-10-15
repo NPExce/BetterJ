@@ -4,9 +4,13 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.debug
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.ui.popup.Balloon
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -14,26 +18,24 @@ import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.panels.ListLayout
 import com.intellij.util.ui.InlineIconButton
 import com.intellij.util.ui.JBUI
-import com.intellij.util.ui.UIUtil
 import pl.adrros.betterpullrequests.BetterPullRequestsBundle
 import pl.adrros.betterpullrequests.emoji.EmojiIcon
 import pl.adrros.betterpullrequests.paste.PastedImages
 import java.awt.Component
 import java.awt.Container
 import java.awt.event.ActionListener
-import java.awt.event.HierarchyEvent
-import java.awt.event.HierarchyListener
-import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-/**
- * Two small buttons under every review comment field: an emoji picker and "paste image from clipboard".
- * The GitHub plugin lays the field's action row out with MigLayout (hints on the left, Reply/Resolve on the
- * right); the buttons slot in as the row's first cell.
- */
 private val LOG = logger<CommentInputButtons>()
 
+/**
+ * Two small buttons under every review comment field: an emoji picker and "paste image from clipboard".
+ * `CommentInputActionsComponentFactory.attachActions` stacks the field and a MigLayout row (hints on the left,
+ * Reply / Resolve on the right) in a vertical list panel; the buttons slot in as the row's first cell. The row
+ * exists from the start while its own buttons arrive later from a coroutine, so the row is recognised by its
+ * place next to the field, never by what it contains.
+ */
 object CommentInputButtons {
     private const val INSTALLED = "BetterPullRequests.inputButtons"
     private const val MIG_LAYOUT = "MigLayout"
@@ -41,47 +43,46 @@ object CommentInputButtons {
     private const val ICON_SIZE = 16
 
     fun watch(editor: Editor) {
-        val component = editor.component
-        if (component.isDisplayable && install(editor)) return
-        component.addHierarchyListener(object : HierarchyListener {
-            override fun hierarchyChanged(e: HierarchyEvent) {
-                if (e.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong() == 0L || !component.isDisplayable) return
-                component.removeHierarchyListener(this)
-                install(editor)
-            }
-        })
+        Retrying.whenDisplayable(editor.component) { editor.isDisposed || install(editor) }
     }
 
     fun install(editor: Editor): Boolean {
         val row = findActionRow(editor.component)
         if (row == null) {
-            LOG.info("No action row for review comment editor; ancestors: ${describeAncestors(editor.component)}")
+            LOG.debug { "No action row yet for review comment editor; ancestors: ${describeAncestors(editor.component)}" }
             return false
         }
         if (row.getClientProperty(INSTALLED) != null) return true
         val buttons = JPanel(ListLayout.horizontal(JBUI.scale(4))).apply {
             isOpaque = false
-            add(button(EmojiIcon("😀", ICON_SIZE), BetterPullRequestsBundle.message("input.button.emoji")) {
+            add(button(EmojiIcon("😀", ICON_SIZE), emojiTooltip()) {
                 perform(ReviewCommentEditorListener.INSERT_EMOJI_ACTION, editor)
             })
-            add(button(AllIcons.FileTypes.Image, BetterPullRequestsBundle.message("input.button.image")) {
-                if (PastedImages.clipboardHasImagesOnly()) perform(ReviewCommentEditorListener.PASTE_IMAGE_ACTION, editor)
+            add(button(AllIcons.FileTypes.Image, imageTooltip()) {
+                if (PastedImages.fromClipboard().isNotEmpty()) perform(ReviewCommentEditorListener.PASTE_IMAGE_ACTION, editor)
                 else showHint(it, BetterPullRequestsBundle.message("input.button.image.empty"))
             })
         }
         row.add(buttons, 0)
         row.putClientProperty(INSTALLED, buttons)
+        service<ReviewUiDecorationService>().track(row, buttons, INSTALLED)
         row.revalidate()
         row.repaint()
         return true
     }
 
-    /** The MigLayout row holding the Reply / Resolve buttons, found next to the editor in its ancestors. */
+    /** The MigLayout row that follows the field inside the vertical list panel built by `attachActions`. */
     fun findActionRow(editorComponent: JComponent): JComponent? {
+        var child: Component = editorComponent
         var ancestor: Container? = editorComponent.parent
         repeat(MAX_ANCESTORS) {
             val current = ancestor ?: return null
-            current.components.firstOrNull(::isActionRow)?.let { return it as JComponent }
+            if (current is JPanel && current.layout is ListLayout) {
+                val index = current.components.indexOf(child)
+                val next = current.components.getOrNull(index + 1)
+                if (next is JPanel && next.layout?.javaClass?.simpleName == MIG_LAYOUT) return next
+            }
+            child = current
             ancestor = current.parent
         }
         return null
@@ -99,10 +100,19 @@ object CommentInputButtons {
         return chain.joinToString(" <- ")
     }
 
-    private fun isActionRow(component: Component): Boolean =
-        component is JPanel &&
-            component.layout?.javaClass?.simpleName == MIG_LAYOUT &&
-            UIUtil.uiTraverser(component).any { it is JButton }
+    private fun emojiTooltip(): String {
+        val shortcut = ActionManager.getInstance().getAction(ReviewCommentEditorListener.INSERT_EMOJI_ACTION)
+            ?.let { KeymapUtil.getFirstKeyboardShortcutText(it) }.orEmpty()
+        return BetterPullRequestsBundle.message("input.button.emoji", shortcut)
+    }
+
+    private fun imageTooltip(): String {
+        val shortcut = listOf(IdeActions.ACTION_EDITOR_PASTE, IdeActions.ACTION_PASTE)
+            .map { KeymapUtil.getFirstKeyboardShortcutText(it) }
+            .firstOrNull { it.isNotEmpty() }
+            .orEmpty()
+        return BetterPullRequestsBundle.message("input.button.image", shortcut)
+    }
 
     private fun button(icon: javax.swing.Icon, tooltip: String, onClick: (JComponent) -> Unit): InlineIconButton =
         InlineIconButton(icon).apply {
@@ -112,6 +122,7 @@ object CommentInputButtons {
         }
 
     private fun perform(actionId: String, editor: Editor) {
+        if (editor.isDisposed) return
         val action: AnAction = ActionManager.getInstance().getAction(actionId) ?: return
         editor.contentComponent.requestFocusInWindow()
         ActionUtil.invokeAction(action, editor.contentComponent, ActionPlaces.EDITOR_TOOLBAR, null, null)

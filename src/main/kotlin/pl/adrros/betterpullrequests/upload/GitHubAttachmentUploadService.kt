@@ -1,59 +1,59 @@
 package pl.adrros.betterpullrequests.upload
 
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.jetbrains.plugins.github.api.GHRepositoryCoordinates
 import org.jetbrains.plugins.github.authentication.accounts.GHAccountManager
-import org.jetbrains.plugins.github.pullrequest.ui.GHPRProjectViewModel
 import pl.adrros.betterpullrequests.BetterPullRequestsBundle
+import pl.adrros.betterpullrequests.review.ReviewTarget
 import java.util.concurrent.ConcurrentHashMap
 
 private val LOG = logger<GitHubAttachmentUploadService>()
 
-@Service(Service.Level.PROJECT)
-class GitHubAttachmentUploadService(private val project: Project, private val cs: CoroutineScope) : AttachmentUploadService {
+class GitHubAttachmentUploadService(@Suppress("unused") private val project: Project, private val cs: CoroutineScope) : AttachmentUploadService {
     private val client = GitHubUploadClient()
     private val repositoryIds = ConcurrentHashMap<GHRepositoryCoordinates, Long>()
 
-    override fun uploadAsync(fileName: String, contentType: String, bytes: ByteArray, onFinished: (Result<String>) -> Unit) {
+    override fun uploadAsync(target: ReviewTarget, fileName: String, contentType: String, load: () -> ByteArray, onFinished: (Result<String>) -> Unit) {
         cs.launch(Dispatchers.IO) {
-            val result = runCatching { upload(fileName, contentType, bytes) }
-            result.exceptionOrNull()?.let { LOG.warn("Attachment upload failed: $fileName", it) }
+            val result = try {
+                Result.success(upload(target, fileName, contentType, load))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LOG.warn("Attachment upload failed: $fileName", e)
+                Result.failure(e)
+            }
             withContext(Dispatchers.EDT) { onFinished(result) }
         }
     }
 
-    private suspend fun upload(fileName: String, contentType: String, bytes: ByteArray): String {
-        val target = currentReviewTarget()
+    private suspend fun upload(target: ReviewTarget, fileName: String, contentType: String, load: () -> ByteArray): String {
+        if (!target.account.server.isGithubDotCom) {
+            throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.enterprise", target.account.server.toUrl()))
+        }
         val token = service<GHAccountManager>().findCredentials(target.account)
             ?: throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.no.token", target.account.name))
-        val repositoryId = repositoryIds.getOrPut(target.repository) {
-            client.fetchRepositoryId(token, target.repository.repositoryPath.owner, target.repository.repositoryPath.repository)
-        }
-        return client.upload(token, repositoryId, fileName, contentType, bytes).also {
+        val bytes = runInterruptible { load() }
+        if (bytes.size > MAX_BYTES) throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.too.big", bytes.size / 1_000_000))
+        val path = target.repository.repositoryPath
+        val repositoryId = repositoryIds[target.repository]
+            ?: runInterruptible { client.fetchRepositoryId(token, path.owner, path.repository) }.also { repositoryIds[target.repository] = it }
+        return runInterruptible { client.upload(token, repositoryId, fileName, contentType, bytes) }.also {
             LOG.info("Uploaded attachment $fileName (${bytes.size} bytes) to $it")
         }
     }
 
-    private fun currentReviewTarget(): ReviewTarget {
-        val connected = project.service<GHPRProjectViewModel>().connectedProjectVm.value
-            ?: throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.not.connected"))
-        val account = connected.dataContext.securityService.account
-        if (!account.server.isGithubDotCom) {
-            throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.enterprise", account.server.toUrl()))
-        }
-        return ReviewTarget(account, connected.repository)
+    companion object {
+        /** GitHub rejects larger image attachments. */
+        private const val MAX_BYTES = 10 * 1024 * 1024
     }
-
-    private class ReviewTarget(
-        val account: org.jetbrains.plugins.github.authentication.accounts.GithubAccount,
-        val repository: GHRepositoryCoordinates,
-    )
 }

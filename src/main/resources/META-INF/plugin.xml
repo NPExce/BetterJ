@@ -20,17 +20,22 @@
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="BetterPullRequests" displayType="BALLOON"/>
 
-        <postStartupActivity implementation="pl.adrros.betterpullrequests.copy.CommentPanePopupInstaller"/>
+        <postStartupActivity implementation="pl.adrros.betterpullrequests.review.ReviewUiDecorationInstaller"/>
 
         <editorFactoryListener implementation="pl.adrros.betterpullrequests.review.ReviewCommentEditorListener"/>
 
         <actionPromoter implementation="pl.adrros.betterpullrequests.review.ReviewActionPromoter"/>
+
+        <customPasteProvider implementation="pl.adrros.betterpullrequests.paste.ReviewImagePasteProvider" order="first"/>
 
         <completion.contributor language="any"
                                 implementationClass="pl.adrros.betterpullrequests.emoji.EmojiCompletionContributor"/>
 
         <projectService serviceInterface="pl.adrros.betterpullrequests.upload.AttachmentUploadService"
                         serviceImplementation="pl.adrros.betterpullrequests.upload.GitHubAttachmentUploadService"/>
+
+        <applicationService serviceInterface="pl.adrros.betterpullrequests.review.ReviewTargets"
+                            serviceImplementation="pl.adrros.betterpullrequests.review.ReviewTargets$Default"/>
     </extensions>
 
     <actions>
@@ -52,14 +57,13 @@
         </group>
 
         <action id="BetterPullRequests.PasteImage"
-                class="pl.adrros.betterpullrequests.paste.PasteReviewImageAction"
-                use-shortcut-of="$Paste">
+                class="pl.adrros.betterpullrequests.paste.PasteReviewImageAction">
             <add-to-group group-id="EditMenu" anchor="last"/>
         </action>
 
         <action id="BetterPullRequests.InsertEmoji"
                 class="pl.adrros.betterpullrequests.emoji.InsertEmojiAction">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt E"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift SEMICOLON"/>
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <add-to-group group-id="EditMenu" anchor="last"/>
         </action>

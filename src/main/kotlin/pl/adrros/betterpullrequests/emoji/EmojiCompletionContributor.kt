@@ -8,9 +8,10 @@ import com.intellij.codeInsight.completion.PlainPrefixMatcher
 import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.DumbAware
 import pl.adrros.betterpullrequests.review.ReviewCommentEditors
 
-class EmojiCompletionContributor : CompletionContributor() {
+class EmojiCompletionContributor : CompletionContributor(), DumbAware {
     override fun fillCompletionVariants(parameters: CompletionParameters, result: CompletionResultSet) {
         val file = parameters.originalFile.virtualFile ?: return
         if (!ReviewCommentEditors.isReviewCommentFile(file)) return

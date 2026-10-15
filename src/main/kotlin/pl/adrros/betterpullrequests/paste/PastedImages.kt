@@ -4,15 +4,23 @@ import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.util.ui.ImageUtil
 import java.awt.Image
 import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.Transferable
+import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.imageio.ImageIO
 
-class PastedImage(val fileName: String, val contentType: String, val bytes: ByteArray)
+/** An image waiting to be uploaded. Reading and encoding happens in [load], off the UI thread. */
+class PastedImage(val fileName: String, val contentType: String, val load: () -> ByteArray)
 
-/** Reads images off the clipboard: a screenshot (raw image data) or image files copied from a file manager. */
+/**
+ * Reads images off the clipboard: a screenshot (raw image data) or image files copied from a file manager.
+ * Text next to an image is fine when it is only the image's address or name (browsers and file managers add that);
+ * real text wins over an image, because then the user most likely meant to paste the text.
+ */
 object PastedImages {
     private val IMAGE_CONTENT_TYPES = mapOf(
         "png" to "image/png",
@@ -24,36 +32,60 @@ object PastedImages {
     )
     private val TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
 
-    /** True when the clipboard holds an image or files and no text, so a paste cannot mean "paste text". */
-    fun clipboardHasImagesOnly(): Boolean {
-        val clipboard = CopyPasteManager.getInstance()
-        if (clipboard.areDataFlavorsAvailable(DataFlavor.stringFlavor)) return false
-        return clipboard.areDataFlavorsAvailable(DataFlavor.imageFlavor) || clipboard.areDataFlavorsAvailable(DataFlavor.javaFileListFlavor)
+    fun fromClipboard(): List<PastedImage> {
+        val contents = CopyPasteManager.getInstance().contents ?: return emptyList()
+        return fromTransferable(contents)
     }
 
-    fun fromClipboard(): List<PastedImage> {
-        val clipboard = CopyPasteManager.getInstance()
-        if (!clipboardHasImagesOnly()) return emptyList()
-        if (clipboard.areDataFlavorsAvailable(DataFlavor.imageFlavor)) {
-            val image = clipboard.getContents<Image>(DataFlavor.imageFlavor) ?: return emptyList()
-            return listOf(screenshot(image))
+    fun fromTransferable(contents: Transferable): List<PastedImage> {
+        if (!textAllowsImage(contents)) return emptyList()
+        if (contents.isDataFlavorSupported(DataFlavor.imageFlavor)) {
+            return listOf(screenshot(image = { contents.getTransferData(DataFlavor.imageFlavor) as Image }))
         }
-        if (clipboard.areDataFlavorsAvailable(DataFlavor.javaFileListFlavor)) {
-            val files = clipboard.getContents<List<File>>(DataFlavor.javaFileListFlavor) ?: return emptyList()
+        if (contents.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+            @Suppress("UNCHECKED_CAST")
+            val files = contents.getTransferData(DataFlavor.javaFileListFlavor) as? List<File> ?: return emptyList()
             return files.mapNotNull { imageFile(it) }
         }
         return emptyList()
     }
 
-    fun screenshot(image: Image, now: LocalDateTime = LocalDateTime.now()): PastedImage {
-        val buffered = ImageUtil.toBufferedImage(image)
-        val bytes = ByteArrayOutputStream().also { ImageIO.write(buffered, "png", it) }.toByteArray()
-        return PastedImage("screenshot-${TIMESTAMP.format(now)}.png", "image/png", bytes)
+    fun textAllowsImage(contents: Transferable): Boolean {
+        if (!contents.isDataFlavorSupported(DataFlavor.stringFlavor)) return true
+        val text = runCatching { contents.getTransferData(DataFlavor.stringFlavor) as? String }.getOrNull() ?: return true
+        return isAddressLike(text)
+    }
+
+    /** A URL, a file path or a bare file name: what clipboards put next to an image, never prose. */
+    fun isAddressLike(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return true
+        if (trimmed.any { it == '\n' || it == '\r' }) return false
+        return trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("file:") ||
+            trimmed.startsWith("/") || !trimmed.contains(' ')
+    }
+
+    fun screenshot(image: () -> Image, now: LocalDateTime = LocalDateTime.now()): PastedImage =
+        PastedImage("screenshot-${TIMESTAMP.format(now)}.png", "image/png") { encodePng(image()) }
+
+    fun encodePng(image: Image): ByteArray {
+        val source = ImageUtil.toBufferedImage(image)
+        val argb = BufferedImage(source.width, source.height, BufferedImage.TYPE_INT_ARGB).also { target ->
+            val g = target.createGraphics()
+            try {
+                g.drawImage(source, 0, 0, null)
+            } finally {
+                g.dispose()
+            }
+        }
+        val out = ByteArrayOutputStream()
+        if (!ImageIO.write(argb, "png", out)) throw IOException("No PNG encoder for the clipboard image")
+        return out.toByteArray()
     }
 
     fun imageFile(file: File): PastedImage? {
         val contentType = IMAGE_CONTENT_TYPES[file.extension.lowercase()] ?: return null
         if (!file.isFile) return null
-        return PastedImage(file.name, contentType, file.readBytes())
+        return PastedImage(file.name, contentType) { file.readBytes() }
     }
 }

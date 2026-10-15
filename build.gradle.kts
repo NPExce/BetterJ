@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "pl.adrros"
-version = "0.3.4"
+version = "0.4.0"
 
 repositories {
     mavenCentral()
@@ -34,7 +34,7 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "261"
-            untilBuild = provider { null }
+            untilBuild = "263.*"
         }
     }
     pluginVerification {
