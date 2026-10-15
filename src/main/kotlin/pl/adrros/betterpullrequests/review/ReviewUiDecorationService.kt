@@ -17,7 +17,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.adrros.betterpullrequests.copy.CommentCopyButtons
 import pl.adrros.betterpullrequests.copy.CommentPanes
+import pl.adrros.betterpullrequests.review.files.ReviewChangeTrees
 import pl.adrros.betterpullrequests.review.submit.DetailsReviewButton
+import com.intellij.openapi.vcs.changes.ui.ChangesTree
+import javax.swing.JTree
 import javax.swing.JPanel
 import java.awt.AWTEvent
 import java.awt.Toolkit
@@ -60,6 +63,7 @@ class ReviewUiDecorationService : Disposable {
             event is ContainerEvent && event.id == ContainerEvent.COMPONENT_ADDED -> {
                 CommentPanes.asCommentPane(event.child)?.let(CommentCopyButtons::watch)
                 (event.child as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch)
+                (event.child as? ChangesTree)?.takeIf(ReviewChangeTrees::isReviewChangesTree)?.let(ReviewChangeTrees::watch)
             }
             event is MouseEvent && event.isPopupTrigger ->
                 CommentPanes.asCommentPane(event.component)?.let { showPopup(it, event) }
@@ -82,6 +86,7 @@ class ReviewUiDecorationService : Disposable {
                 UIUtil.uiTraverser(window).forEach { component ->
                     CommentPanes.asCommentPane(component)?.let(CommentCopyButtons::watch)
                     (component as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch)
+                    (component as? ChangesTree)?.takeIf(ReviewChangeTrees::isReviewChangesTree)?.let(ReviewChangeTrees::watch)
                 }
             }
             EditorFactory.getInstance().allEditors.forEach(ReviewCommentEditorListener::decorate)
@@ -101,6 +106,7 @@ class ReviewUiDecorationService : Disposable {
         guarded {
             for (window in Window.getWindows()) {
                 for (component in UIUtil.uiTraverser(window).filter(JComponent::class.java)) {
+                    if (component is JTree && component.getClientProperty(ReviewChangeTrees.INSTALLED) != null) ReviewChangeTrees.uninstall(component)
                     for (flag in INJECTED_FLAGS) {
                         (component.getClientProperty(flag) as? JComponent)?.let { injected ->
                             component.remove(injected)
