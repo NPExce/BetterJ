@@ -22,6 +22,8 @@
 
         <postStartupActivity implementation="pl.adrros.betterpullrequests.copy.CommentPanePopupInstaller"/>
 
+        <editorFactoryListener implementation="pl.adrros.betterpullrequests.review.ReviewCommentEditorListener"/>
+
         <actionPromoter implementation="pl.adrros.betterpullrequests.review.ReviewActionPromoter"/>
 
         <completion.contributor language="any"

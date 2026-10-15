@@ -17,9 +17,9 @@ class CommentCopyButtonsTest : BasePlatformTestCase() {
     }
 
     /** Mirrors `CodeReviewChatItemUIUtil.ComponentFactory.wrapWithHeader`: header (title + actions) above the body. */
-    private fun commentItem(pane: JEditorPane, actions: JPanel): JPanel {
+    private fun commentItem(pane: JEditorPane, actions: JPanel, title: JEditorPane = commentPane()): JPanel {
         val header = JPanel(MigLayout()).apply {
-            add(HorizontalListPanel().apply { add(JLabel("author")) })
+            add(HorizontalListPanel().apply { add(title) })
             add(actions)
         }
         val body = VerticalListPanel().apply { add(JPanel().apply { add(pane) }) }
@@ -48,6 +48,18 @@ class CommentCopyButtonsTest : BasePlatformTestCase() {
         commentItem(pane, actions)
 
         assertTrue(CommentCopyButtons.install(pane))
+        assertEquals(1, actions.componentCount)
+    }
+
+    fun `test the author title pane in the header does not claim the button`() {
+        val body = commentPane()
+        val title = commentPane()
+        val actions = HorizontalListPanel()
+        commentItem(body, actions, title)
+
+        assertFalse(CommentCopyButtons.install(title))
+        assertEquals(0, actions.componentCount)
+        assertTrue(CommentCopyButtons.install(body))
         assertEquals(1, actions.componentCount)
     }
 

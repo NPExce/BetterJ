@@ -54,14 +54,26 @@ object CommentCopyButtons {
         return true
     }
 
+    /**
+     * The actions row of the comment the pane belongs to. The author-and-date title is a pane of the same kind
+     * sitting inside the header next to the actions; it must not claim the button for itself.
+     */
     fun findActionsPanel(pane: JEditorPane): JComponent? {
         var ancestor: Container? = pane.parent
         repeat(MAX_ANCESTORS) {
             val current = ancestor ?: return null
-            UIUtil.uiTraverser(current).filter(::isActionsPanel).firstOrNull()?.let { return it as JComponent }
+            val actions = UIUtil.uiTraverser(current).filter(::isActionsPanel).firstOrNull() as JComponent?
+            if (actions != null) {
+                return actions.takeUnless { pane.isInsideHeaderOf(it) }
+            }
             ancestor = current.parent
         }
         return null
+    }
+
+    private fun JEditorPane.isInsideHeaderOf(actions: JComponent): Boolean {
+        val header = actions.parent ?: return false
+        return UIUtil.uiTraverser(header).contains(this)
     }
 
     private fun isActionsPanel(component: Component): Boolean =
