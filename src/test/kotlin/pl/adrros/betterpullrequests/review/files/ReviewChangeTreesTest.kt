@@ -93,7 +93,7 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
 
     fun `test the selected editor file is tracked as a file path`() {
         val file = myFixture.configureByText("tracked.txt", "x").virtualFile
-        assertEquals(com.intellij.vcsUtil.VcsUtil.getFilePath(file), project.service<CurrentReviewFile>().path)
+        assertEquals(com.intellij.openapi.vcs.actions.VcsContextFactory.getInstance().createFilePathOn(file), project.service<CurrentReviewFile>().path)
     }
 
     fun `test the overlay follows the tree size, never takes clicks and goes away on uninstall`() {

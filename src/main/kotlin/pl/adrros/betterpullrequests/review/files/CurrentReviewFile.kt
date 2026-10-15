@@ -9,7 +9,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.containers.ContainerUtil
-import com.intellij.vcsUtil.VcsUtil
+import com.intellij.openapi.vcs.actions.VcsContextFactory
 import javax.swing.JTree
 
 /**
@@ -25,7 +25,7 @@ class CurrentReviewFile(private val project: Project) {
     private var initialised = false
     private val trees = ContainerUtil.createWeakSet<JTree>()
 
-    fun update(file: VirtualFile?) = update(file?.let { VcsUtil.getFilePath(it) })
+    fun update(file: VirtualFile?) = update(file?.let { VcsContextFactory.getInstance().createFilePathOn(it) })
 
     fun update(path: FilePath?) {
         initialised = true
