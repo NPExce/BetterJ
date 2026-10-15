@@ -17,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.adrros.betterpullrequests.copy.CommentCopyButtons
 import pl.adrros.betterpullrequests.copy.CommentPanes
+import pl.adrros.betterpullrequests.review.submit.DetailsReviewButton
+import javax.swing.JPanel
 import java.awt.AWTEvent
 import java.awt.Toolkit
 import java.awt.Window
@@ -55,8 +57,10 @@ class ReviewUiDecorationService : Disposable {
 
     private fun handle(event: AWTEvent) {
         when {
-            event is ContainerEvent && event.id == ContainerEvent.COMPONENT_ADDED ->
+            event is ContainerEvent && event.id == ContainerEvent.COMPONENT_ADDED -> {
                 CommentPanes.asCommentPane(event.child)?.let(CommentCopyButtons::watch)
+                (event.child as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch)
+            }
             event is MouseEvent && event.isPopupTrigger ->
                 CommentPanes.asCommentPane(event.component)?.let { showPopup(it, event) }
         }
@@ -75,7 +79,10 @@ class ReviewUiDecorationService : Disposable {
     private fun decorateExisting() {
         guarded {
             for (window in Window.getWindows()) {
-                UIUtil.uiTraverser(window).forEach { component -> CommentPanes.asCommentPane(component)?.let(CommentCopyButtons::watch) }
+                UIUtil.uiTraverser(window).forEach { component ->
+                    CommentPanes.asCommentPane(component)?.let(CommentCopyButtons::watch)
+                    (component as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch)
+                }
             }
             EditorFactory.getInstance().allEditors.forEach(ReviewCommentEditorListener::decorate)
         }
@@ -111,7 +118,7 @@ class ReviewUiDecorationService : Disposable {
 
     companion object {
         /** Markers whose value is the injected component. */
-        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED)
+        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED)
         val ALL_FLAGS: List<String> = INJECTED_FLAGS + CommentCopyButtons.WATCHED
 
         /** Listener code runs inside AWT event dispatch; an exception there would be reported as an IDE error. */

@@ -8,6 +8,7 @@
             <li>Copy review comments (Cmd/Ctrl+C on a comment, or the context menu) - whole comment or the selected part.</li>
             <li>Emoji in review comments: <code>:smile:</code> completion and a searchable emoji picker.</li>
             <li>Paste screenshots and image files into review comments - uploaded as native GitHub attachments.</li>
+            <li>A "Review…" button next to Merge: approve, request changes or comment, also when someone else already approved.</li>
         </ul>
     ]]></description>
 
@@ -59,6 +60,13 @@
         <action id="BetterPullRequests.PasteImage"
                 class="pl.adrros.betterpullrequests.paste.PasteReviewImageAction">
             <add-to-group group-id="EditMenu" anchor="last"/>
+        </action>
+
+        <action id="BetterPullRequests.SubmitReview"
+                class="pl.adrros.betterpullrequests.review.submit.SubmitReviewAction"
+                icon="AllIcons.Actions.Checked">
+            <add-to-group group-id="Github.PullRequest.Details.Popup" anchor="first"/>
+            <add-to-group group-id="Github.PullRequest.Timeline.Popup" anchor="first"/>
         </action>
 
         <action id="BetterPullRequests.InsertEmoji"
