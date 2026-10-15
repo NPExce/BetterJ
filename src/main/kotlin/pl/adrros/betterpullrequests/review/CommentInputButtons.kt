@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.ui.popup.Balloon
@@ -31,6 +32,8 @@ import javax.swing.JPanel
  * The GitHub plugin lays the field's action row out with MigLayout (hints on the left, Reply/Resolve on the
  * right); the buttons slot in as the row's first cell.
  */
+private val LOG = logger<CommentInputButtons>()
+
 object CommentInputButtons {
     private const val INSTALLED = "BetterPullRequests.inputButtons"
     private const val MIG_LAYOUT = "MigLayout"
@@ -50,7 +53,11 @@ object CommentInputButtons {
     }
 
     fun install(editor: Editor): Boolean {
-        val row = findActionRow(editor.component) ?: return false
+        val row = findActionRow(editor.component)
+        if (row == null) {
+            LOG.info("No action row for review comment editor; ancestors: ${describeAncestors(editor.component)}")
+            return false
+        }
         if (row.getClientProperty(INSTALLED) != null) return true
         val buttons = JPanel(ListLayout.horizontal(JBUI.scale(4))).apply {
             isOpaque = false
@@ -78,6 +85,18 @@ object CommentInputButtons {
             ancestor = current.parent
         }
         return null
+    }
+
+    private fun describeAncestors(component: JComponent): String {
+        val chain = mutableListOf<String>()
+        var current: Container? = component.parent
+        repeat(MAX_ANCESTORS) {
+            val c = current ?: return@repeat
+            val children = c.components.joinToString(",") { it.javaClass.simpleName + "/" + ((it as? Container)?.layout?.javaClass?.simpleName ?: "-") }
+            chain += "${c.javaClass.simpleName}/${c.layout?.javaClass?.simpleName}[$children]"
+            current = c.parent
+        }
+        return chain.joinToString(" <- ")
     }
 
     private fun isActionRow(component: Component): Boolean =

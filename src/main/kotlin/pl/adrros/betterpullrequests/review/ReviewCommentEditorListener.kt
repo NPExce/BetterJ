@@ -4,6 +4,11 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ShortcutSet
 import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import pl.adrros.betterpullrequests.copy.CommentPanePopupService
+import pl.adrros.betterpullrequests.paste.PasteShortcutInterceptor
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
@@ -15,8 +20,12 @@ import com.intellij.openapi.util.Key
  * Shortcuts registered on the focused component beat everything the keymap offers, so the paste and emoji
  * actions are attached straight to every review comment editor. The comment input buttons ride along.
  */
+private val LOG = logger<ReviewCommentEditorListener>()
+
 class ReviewCommentEditorListener : EditorFactoryListener {
     override fun editorCreated(event: EditorFactoryEvent) {
+        service<CommentPanePopupService>().ensureInstalled()
+        service<PasteShortcutInterceptor>().ensureInstalled()
         decorate(event.editor)
     }
 
@@ -36,6 +45,7 @@ class ReviewCommentEditorListener : EditorFactoryListener {
         /** Also used at plugin start for editors that already exist, e.g. after an install without restart. */
         fun decorate(editor: Editor) {
             if (!ReviewCommentEditors.isReviewCommentEditor(editor) || editor.getUserData(DISPOSABLE) != null) return
+            LOG.info("Decorating review comment editor for ${FileDocumentManager.getInstance().getFile(editor.document)} in ${editor.project?.name}")
             val disposable = Disposer.newDisposable("BetterPullRequests review comment editor")
             editor.putUserData(DISPOSABLE, disposable)
             registerShortcut(editor, PASTE_IMAGE_ACTION, KeymapUtil.getActiveKeymapShortcuts(PASTE_ACTION), disposable)
