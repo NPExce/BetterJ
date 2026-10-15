@@ -2,6 +2,8 @@ package pl.adrros.betterpullrequests.review
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.components.service
+import com.intellij.openapi.util.Condition
 import java.awt.event.HierarchyEvent
 import java.awt.event.HierarchyListener
 import javax.swing.JComponent
@@ -30,10 +32,11 @@ object Retrying {
 
     private fun retryLater(attempt: () -> Boolean, attemptsLeft: Int = ATTEMPTS) {
         if (attemptsLeft == 0) return
+        val service = service<ReviewUiDecorationService>()
         ApplicationManager.getApplication().invokeLater({
             ReviewUiDecorationService.guarded {
                 if (!attempt()) retryLater(attempt, attemptsLeft - 1)
             }
-        }, ModalityState.any())
+        }, ModalityState.any(), Condition<Any?> { service.isDisposed })
     }
 }

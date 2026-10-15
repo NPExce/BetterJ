@@ -32,20 +32,22 @@ object PastedImages {
     )
     private val TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
 
-    fun fromClipboard(): List<PastedImage> {
+    /** @param respectText false when the user asked for the image explicitly (button, menu), true for a plain paste. */
+    fun fromClipboard(respectText: Boolean = true): List<PastedImage> {
         val contents = CopyPasteManager.getInstance().contents ?: return emptyList()
-        return fromTransferable(contents)
+        return fromTransferable(contents, respectText)
     }
 
-    fun fromTransferable(contents: Transferable): List<PastedImage> {
-        if (!textAllowsImage(contents)) return emptyList()
+    fun fromTransferable(contents: Transferable, respectText: Boolean = true): List<PastedImage> {
+        if (contents.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+            // File managers add the file names as text and sometimes the icon as an image; the files are what counts.
+            @Suppress("UNCHECKED_CAST")
+            val files = runCatching { contents.getTransferData(DataFlavor.javaFileListFlavor) as? List<File> }.getOrNull() ?: return emptyList()
+            return files.mapNotNull { imageFile(it) }
+        }
+        if (respectText && !textAllowsImage(contents)) return emptyList()
         if (contents.isDataFlavorSupported(DataFlavor.imageFlavor)) {
             return listOf(screenshot(image = { contents.getTransferData(DataFlavor.imageFlavor) as Image }))
-        }
-        if (contents.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
-            @Suppress("UNCHECKED_CAST")
-            val files = contents.getTransferData(DataFlavor.javaFileListFlavor) as? List<File> ?: return emptyList()
-            return files.mapNotNull { imageFile(it) }
         }
         return emptyList()
     }
@@ -86,6 +88,12 @@ object PastedImages {
     fun imageFile(file: File): PastedImage? {
         val contentType = IMAGE_CONTENT_TYPES[file.extension.lowercase()] ?: return null
         if (!file.isFile) return null
-        return PastedImage(file.name, contentType) { file.readBytes() }
+        return PastedImage(file.name, contentType) {
+            if (file.length() > MAX_BYTES) throw IOException("${file.name} is ${file.length() / 1_000_000} MB; GitHub accepts attachments up to 10 MB")
+            file.readBytes()
+        }
     }
+
+    /** GitHub rejects larger image attachments. */
+    const val MAX_BYTES: Long = 10L * 1024 * 1024
 }

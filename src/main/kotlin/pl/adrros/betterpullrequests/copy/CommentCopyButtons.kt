@@ -1,7 +1,6 @@
 package pl.adrros.betterpullrequests.copy
 
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.components.service
 import com.intellij.ui.components.panels.ListLayout
 import com.intellij.util.ui.InlineIconButton
 import com.intellij.util.ui.UIUtil
@@ -21,15 +20,15 @@ import javax.swing.JPanel
  * `InlineIconButton`s, inside a header laid out with MigLayout; those facts are the only way to recognise it.
  */
 object CommentCopyButtons {
-    private const val WATCHED = "BetterPullRequests.copyButton.watched"
-    private const val INSTALLED = "BetterPullRequests.copyButton"
+    const val WATCHED = "BetterPullRequests.copyButton.watched"
+    const val INSTALLED = "BetterPullRequests.copyButton"
     private const val MIG_LAYOUT = "MigLayout"
     private const val MAX_ANCESTORS = 8
 
     /** Call when a comment pane joins a container; the button lands once the whole comment is on screen. */
     fun watch(pane: JEditorPane) {
         if (pane.getClientProperty(WATCHED) != null) return
-        service<ReviewUiDecorationService>().flag(pane, WATCHED)
+        pane.putClientProperty(WATCHED, true)
         Retrying.whenDisplayable(pane) { !pane.isDisplayable || install(pane) }
     }
 
@@ -41,9 +40,8 @@ object CommentCopyButtons {
             withBackgroundHover = true
             actionListener = ActionListener { CommentPanes.copyToClipboard(CommentPanes.wholeText(pane)) }
         }
-        actions.add(button)
         actions.putClientProperty(INSTALLED, button)
-        service<ReviewUiDecorationService>().track(actions, button, INSTALLED)
+        actions.add(button)
         actions.revalidate()
         actions.repaint()
         return true

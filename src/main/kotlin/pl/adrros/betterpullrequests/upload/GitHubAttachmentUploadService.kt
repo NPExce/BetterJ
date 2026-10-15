@@ -8,7 +8,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import pl.adrros.betterpullrequests.paste.PastedImages
 import kotlinx.coroutines.withContext
 import org.jetbrains.plugins.github.api.GHRepositoryCoordinates
 import org.jetbrains.plugins.github.authentication.accounts.GHAccountManager
@@ -42,18 +44,16 @@ class GitHubAttachmentUploadService(@Suppress("unused") private val project: Pro
         }
         val token = service<GHAccountManager>().findCredentials(target.account)
             ?: throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.no.token", target.account.name))
-        val bytes = runInterruptible { load() }
-        if (bytes.size > MAX_BYTES) throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.too.big", bytes.size / 1_000_000))
+        val bytes = load()
+        if (bytes.size > PastedImages.MAX_BYTES) throw AttachmentUploadException(BetterPullRequestsBundle.message("upload.failed.too.big", bytes.size / 1_000_000))
+        currentCoroutineContext().ensureActive()
         val path = target.repository.repositoryPath
         val repositoryId = repositoryIds[target.repository]
-            ?: runInterruptible { client.fetchRepositoryId(token, path.owner, path.repository) }.also { repositoryIds[target.repository] = it }
-        return runInterruptible { client.upload(token, repositoryId, fileName, contentType, bytes) }.also {
+            ?: client.fetchRepositoryId(token, path.owner, path.repository).also { repositoryIds[target.repository] = it }
+        currentCoroutineContext().ensureActive()
+        return client.upload(token, repositoryId, fileName, contentType, bytes).also {
             LOG.info("Uploaded attachment $fileName (${bytes.size} bytes) to $it")
         }
     }
 
-    companion object {
-        /** GitHub rejects larger image attachments. */
-        private const val MAX_BYTES = 10 * 1024 * 1024
-    }
 }

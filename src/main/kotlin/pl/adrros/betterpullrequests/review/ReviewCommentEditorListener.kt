@@ -43,7 +43,9 @@ class ReviewCommentEditorListener : EditorFactoryListener {
         fun decorate(editor: Editor) {
             if (!ReviewCommentEditors.isReviewCommentEditor(editor) || editor.getUserData(DISPOSABLE) != null) return
             LOG.info("Decorating review comment editor for ${FileDocumentManager.getInstance().getFile(editor.document)} in ${editor.project?.name}")
-            val disposable = Disposer.newDisposable(service<ReviewUiDecorationService>(), "BetterPullRequests review comment editor")
+            val decorations = service<ReviewUiDecorationService>()
+            if (decorations.isDisposed) return
+            val disposable = Disposer.newDisposable(decorations, "BetterPullRequests review comment editor")
             editor.putUserData(DISPOSABLE, disposable)
             registerEmojiShortcut(editor, disposable)
             CommentInputButtons.watch(editor)

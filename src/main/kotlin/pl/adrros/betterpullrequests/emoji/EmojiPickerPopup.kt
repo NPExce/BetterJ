@@ -139,7 +139,7 @@ class EmojiPickerPopup(
             }
 
             override fun keyTyped(e: KeyEvent) {
-                if (!e.keyChar.isLetterOrDigit() || e.isControlDown || e.isMetaDown) return
+                if (!EmojiShortcodes.isNameChar(e.keyChar) || (e.isControlDown && !e.isAltDown) || e.isMetaDown) return
                 e.consume()
                 searchField.text = searchField.text + e.keyChar
                 searchField.requestFocusInWindow()

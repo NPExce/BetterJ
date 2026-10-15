@@ -12,7 +12,7 @@ import pl.adrros.betterpullrequests.review.ReviewTargets
 
 /**
  * Uploads the clipboard image into the review comment editor as a GitHub attachment. Reachable from the Edit
- * menu, the button under the comment field and, through [PasteShortcutInterceptor], the paste shortcut.
+ * menu and the button under the comment field; the paste shortcut goes through [ReviewImagePasteProvider].
  */
 class PasteReviewImageAction : DumbAwareAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
@@ -20,7 +20,7 @@ class PasteReviewImageAction : DumbAwareAction() {
     override fun update(e: AnActionEvent) {
         val editor = e.getData(CommonDataKeys.EDITOR)
         val project = e.project
-        e.presentation.isEnabledAndVisible = editor != null && project != null && applies(project, editor) && PastedImages.fromClipboard().isNotEmpty()
+        e.presentation.isEnabledAndVisible = editor != null && project != null && applies(project, editor) && PastedImages.fromClipboard(respectText = false).isNotEmpty()
     }
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -30,14 +30,15 @@ class PasteReviewImageAction : DumbAwareAction() {
     }
 
     companion object {
-        /** A GitHub review comment editor in a project with a connected pull request. */
+        /** A GitHub review comment editor in a project with a connected github.com pull request. */
         fun applies(project: Project, editor: Editor): Boolean =
-            !editor.isDisposed && ReviewCommentEditors.isReviewCommentEditor(editor) && service<ReviewTargets>().current(project) != null
+            !editor.isDisposed && ReviewCommentEditors.isReviewCommentEditor(editor) &&
+                service<ReviewTargets>().current(project)?.account?.server?.isGithubDotCom == true
 
         /** Returns true when at least one image was taken from the clipboard. */
         fun paste(project: Project, editor: Editor): Boolean {
             val target = service<ReviewTargets>().current(project) ?: return false
-            val images = PastedImages.fromClipboard()
+            val images = PastedImages.fromClipboard(respectText = false)
             if (images.isEmpty()) return false
             ReviewImageInserter.insertAndUpload(project, editor, target, images)
             return true

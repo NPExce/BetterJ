@@ -6,7 +6,6 @@ import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.actionSystem.ex.ActionUtil
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.debug
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Editor
@@ -37,7 +36,7 @@ private val LOG = logger<CommentInputButtons>()
  * place next to the field, never by what it contains.
  */
 object CommentInputButtons {
-    private const val INSTALLED = "BetterPullRequests.inputButtons"
+    const val INSTALLED = "BetterPullRequests.inputButtons"
     private const val MIG_LAYOUT = "MigLayout"
     private const val MAX_ANCESTORS = 8
     private const val ICON_SIZE = 16
@@ -59,13 +58,12 @@ object CommentInputButtons {
                 perform(ReviewCommentEditorListener.INSERT_EMOJI_ACTION, editor)
             })
             add(button(AllIcons.FileTypes.Image, imageTooltip()) {
-                if (PastedImages.fromClipboard().isNotEmpty()) perform(ReviewCommentEditorListener.PASTE_IMAGE_ACTION, editor)
+                if (PastedImages.fromClipboard(respectText = false).isNotEmpty()) perform(ReviewCommentEditorListener.PASTE_IMAGE_ACTION, editor)
                 else showHint(it, BetterPullRequestsBundle.message("input.button.image.empty"))
             })
         }
-        row.add(buttons, 0)
         row.putClientProperty(INSTALLED, buttons)
-        service<ReviewUiDecorationService>().track(row, buttons, INSTALLED)
+        row.add(buttons, 0)
         row.revalidate()
         row.repaint()
         return true

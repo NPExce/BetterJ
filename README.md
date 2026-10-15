@@ -7,13 +7,14 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    and a right-click menu with *Copy Comment* and *Copy Selection*. Works in the PR timeline, in diff threads
    and in editor inlays.
 2. **Emoji in comments** - type `:smi` in a comment editor and pick from the completion popup (GitHub short codes,
-   inserted as Unicode glyphs). The 😀 button under the comment field, `Ctrl+Shift+;` or *Edit | Insert Emoji…*
+   inserted as Unicode glyphs). The 😀 button under the comment field, `Ctrl+Shift+;` (`⌘⇧;` on macOS) or *Edit | Insert Emoji…*
    opens an emoji picker: a grid of all 1900+ GitHub emoji with a search box and the recently used ones on top.
 3. **Paste screenshots** - the paste shortcut (whatever your keymap binds it to), the image button under the
    comment field or *Edit | Paste Image as Attachment* with an image on the clipboard (or image files copied from
    a file manager) inserts an `![Uploading …]()` placeholder and uploads the image as a regular GitHub attachment
    (`github.com/user-attachments/assets/...`). The link renders on github.com, in e-mails and in the IDE,
-   also for private repositories. Text next to the image wins unless it is just the image's address or name.
+   also for private repositories. Text next to the image wins unless it is just the image's address; copied files
+   always count as files. *Paste as Plain Text* always pastes the text.
 
 ## Requirements
 

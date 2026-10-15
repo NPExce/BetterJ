@@ -41,6 +41,16 @@ class ReviewImagePasteTest : BasePlatformTestCase() {
         }
     }
 
+    private class FileListContent(private val files: List<java.io.File>, private val text: String) : Transferable {
+        override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(DataFlavor.javaFileListFlavor, DataFlavor.stringFlavor)
+        override fun isDataFlavorSupported(flavor: DataFlavor): Boolean = flavor in transferDataFlavors
+        override fun getTransferData(flavor: DataFlavor): Any = when (flavor) {
+            DataFlavor.javaFileListFlavor -> files
+            DataFlavor.stringFlavor -> text
+            else -> throw UnsupportedFlavorException(flavor)
+        }
+    }
+
     private lateinit var uploads: RecordingUploadService
     private val image = BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB)
 
@@ -112,6 +122,22 @@ class ReviewImagePasteTest : BasePlatformTestCase() {
         assertEquals("rewritten", myFixture.editor.document.text)
     }
 
+    fun `test our provider is asked before the bundled ones`() {
+        val providers = com.intellij.openapi.extensions.ExtensionPointName.create<com.intellij.ide.PasteProvider>("com.intellij.customPasteProvider").extensionList
+        assertTrue(providers.toString(), providers.first() is ReviewImagePasteProvider)
+    }
+
+    fun `test image files copied with their names as text are still images`() {
+        myFixture.openReviewCommentEditor("<caret>")
+        val png = java.io.File.createTempFile("Screenshot 2026-10-15 at 14.09.39", ".png").apply { writeBytes(byteArrayOf(1, 2, 3)); deleteOnExit() }
+        CopyPasteManager.getInstance().setContents(FileListContent(listOf(png), png.name))
+
+        paste()
+
+        assertEquals("image/png", uploads.uploads.single().contentType)
+        assertEquals(png.name, uploads.uploads.single().fileName)
+    }
+
     fun `test text on the clipboard pastes as usual`() {
         myFixture.openReviewCommentEditor("<caret>")
         CopyPasteManager.getInstance().setContents(StringSelection("plain"))
@@ -134,10 +160,21 @@ class ReviewImagePasteTest : BasePlatformTestCase() {
     fun `test without a connected pull request the regular paste runs`() {
         connectTestTarget(testRootDisposable, target = null)
         myFixture.openReviewCommentEditor("<caret>")
+        CopyPasteManager.getInstance().setContents(ClipboardContent(image, "hello"))
+
+        paste()
+
+        assertEquals("hello", myFixture.editor.document.text)
+        assertTrue(uploads.uploads.isEmpty())
+    }
+
+    fun `test a paste replaces the selection`() {
+        myFixture.openReviewCommentEditor("<selection>old text</selection><caret>")
+        myFixture.editor.selectionModel.setSelection(0, 8)
         CopyPasteManager.getInstance().setContents(ClipboardContent(image, null))
 
         paste()
 
-        assertTrue(uploads.uploads.isEmpty())
+        assertTrue(myFixture.editor.document.text, myFixture.editor.document.text.startsWith("![Uploading screenshot-"))
     }
 }

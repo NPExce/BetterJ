@@ -30,6 +30,11 @@ object ReviewImageInserter {
         val document = editor.document
         val placeholder = placeholderFor(image.fileName)
         val marker = WriteCommandAction.writeCommandAction(project).compute<RangeMarker, RuntimeException> {
+            val selection = editor.selectionModel
+            if (selection.hasSelection()) {
+                document.deleteString(selection.selectionStart, selection.selectionEnd)
+                selection.removeSelection()
+            }
             if (separatorBefore) {
                 val at = editor.caretModel.offset
                 document.insertString(at, "\n")
@@ -49,7 +54,9 @@ object ReviewImageInserter {
         }
     }
 
-    fun placeholderFor(fileName: String): String = "![${escapeMarkdown(BetterPullRequestsBundle.message("upload.placeholder", fileName))}]()"
+    fun placeholderFor(fileName: String): String = "$PLACEHOLDER_PREFIX${escapeMarkdown(BetterPullRequestsBundle.message("upload.placeholder", fileName))}]()"
+
+    private const val PLACEHOLDER_PREFIX = "!["
 
     fun imageLink(fileName: String, url: String): String = "![${escapeMarkdown(fileName)}]($url)"
 
@@ -58,7 +65,7 @@ object ReviewImageInserter {
 
     private fun replace(project: Project, document: Document, marker: RangeMarker, text: String) {
         try {
-            if (!marker.isValid || document.getText(marker.textRange) != document.getText(marker.textRange).takeIf { it.startsWith("![") }) {
+            if (!marker.isValid || !document.getText(marker.textRange).startsWith(PLACEHOLDER_PREFIX)) {
                 if (text.isNotEmpty()) {
                     LOG.info("Placeholder for an uploaded image was edited away; link not inserted: $text")
                     notify(project, BetterPullRequestsBundle.message("upload.placeholder.gone.title"), text, NotificationType.INFORMATION)
