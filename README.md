@@ -22,6 +22,11 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    state, also after someone else already approved, where the bundled plugin hides its own button. Authors can
    only comment, as on github.com.
 
+5. **See where you are in the change tree** - the file open in the selected editor tab gets a purple tint and a
+   bar at the left edge in the pull request's file tree, on top of selection, hover and file colours. It follows
+   the editor file matched by path, so it works when the real file is open (review on the checked-out branch);
+   a diff tab does not match. Renamed files match their new path, deleted files never do.
+
 ## Requirements
 
 - IntelliJ IDEA 2026.1 to 2026.3 (builds 261 to 263) with the bundled *GitHub* and *Git* plugins enabled.
@@ -52,6 +57,8 @@ Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbo
   comment, the `Dummy.md` file behind the comment editor, the layout of the comment field's action row).
   A major IDE update may need a small follow-up.
 - Uploads go to github.com only; a GitHub Enterprise account gets an error balloon instead.
+- The current-file mark swaps the change tree's UI delegate for a subclass of the platform's tree UI and recognises
+  the tree by the data key it publishes (class name as fallback); an IDE update may need a follow-up.
 - The *Review…* button is recognised by the shape of the details action row, which GitLab merge requests share;
   it is only added where a GitHub pull request is in the context. The submit flow reuses the GitHub plugin's
   review model through its pluggable popup handler, an internal API.

@@ -11,7 +11,8 @@
             <li>A "Review…" button in the pull request details (and "Submit Review…" in the details, changes and timeline
                 context menus): approve, request changes or comment, also after someone else already approved.
                 Authors can only comment.</li>
-            <li>The changed file you are reading is highlighted in the pull request's file tree, so ticking it as viewed is easy.</li>
+            <li>The changed file open in the editor is tinted purple in the pull request's file tree, so you can see where
+                you are and mark it as viewed.</li>
         </ul>
     ]]></description>
 
