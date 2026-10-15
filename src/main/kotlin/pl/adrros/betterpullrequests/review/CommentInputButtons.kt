@@ -51,8 +51,11 @@ object CommentInputButtons {
             LOG.debug { "No action row yet for review comment editor; ancestors: ${describeAncestors(editor.component)}" }
             return false
         }
-        if (row.getClientProperty(INSTALLED) != null) return true
+        when (val existing = row.getClientProperty(INSTALLED)) {
+            is JComponent -> if (DecorationOwner.owns(existing)) return true else row.remove(existing)
+        }
         val buttons = JPanel(ListLayout.horizontal(JBUI.scale(4))).apply {
+            DecorationOwner.mark(this)
             isOpaque = false
             add(button(EmojiIcon("😀", ICON_SIZE), emojiTooltip()) {
                 perform(ReviewCommentEditorListener.INSERT_EMOJI_ACTION, editor)

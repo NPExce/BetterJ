@@ -5,6 +5,7 @@ import com.intellij.ui.components.panels.ListLayout
 import com.intellij.util.ui.InlineIconButton
 import com.intellij.util.ui.UIUtil
 import pl.adrros.betterpullrequests.BetterPullRequestsBundle
+import pl.adrros.betterpullrequests.review.DecorationOwner
 import pl.adrros.betterpullrequests.review.Retrying
 import pl.adrros.betterpullrequests.review.ReviewUiDecorationService
 import java.awt.Component
@@ -34,8 +35,11 @@ object CommentCopyButtons {
 
     fun install(pane: JEditorPane): Boolean {
         val actions = findActionsPanel(pane) ?: return false
-        if (actions.getClientProperty(INSTALLED) != null) return true
+        when (val existing = actions.getClientProperty(INSTALLED)) {
+            is JComponent -> if (DecorationOwner.owns(existing)) return true else actions.remove(existing)
+        }
         val button = InlineIconButton(AllIcons.Actions.Copy).apply {
+            DecorationOwner.mark(this)
             toolTipText = BetterPullRequestsBundle.message("copy.button.tooltip")
             withBackgroundHover = true
             actionListener = ActionListener { CommentPanes.copyToClipboard(CommentPanes.wholeText(pane)) }

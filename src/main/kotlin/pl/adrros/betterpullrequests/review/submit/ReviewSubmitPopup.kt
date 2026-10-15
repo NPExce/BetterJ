@@ -60,8 +60,10 @@ object ReviewSubmitPopup : CodeReviewSubmitPopupHandler<GHPRSubmitReviewViewMode
         }
     }
 
-    override fun createTitleActionsComponentIn(cs: CoroutineScope, vm: GHPRSubmitReviewViewModel): JComponent {
-        val defaultActions = super.createTitleActionsComponentIn(cs, vm)
+    override fun createTitleActionsComponentIn(cs: CoroutineScope, vm: GHPRSubmitReviewViewModel): JComponent =
+        titleActionsIn(cs, vm, super.createTitleActionsComponentIn(cs, vm))
+
+    fun titleActionsIn(cs: CoroutineScope, vm: GHPRSubmitReviewViewModel, defaultActions: JComponent): JComponent {
         if (!vm.hasPendingReview) return defaultActions
         val discard = InlineIconButton(AllIcons.Actions.GC).apply {
             toolTipText = BetterPullRequestsBundle.message("review.submit.discard")

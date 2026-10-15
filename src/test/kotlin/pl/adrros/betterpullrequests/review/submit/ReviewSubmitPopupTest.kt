@@ -13,11 +13,11 @@ import javax.swing.JButton
 import javax.swing.JLabel
 
 class ReviewSubmitPopupTest : BasePlatformTestCase() {
-    private class FakeSubmitVm(override val viewerIsAuthor: Boolean, comments: Int = 0) : GHPRSubmitReviewViewModel {
-        override val hasPendingReview: Boolean = comments > 0
+    private class FakeSubmitVm(override val viewerIsAuthor: Boolean, comments: Int = 0, pending: Boolean = comments > 0) : GHPRSubmitReviewViewModel {
+        override val hasPendingReview: Boolean = pending
         override val draftCommentsCount: StateFlow<Int> = MutableStateFlow(comments)
         override val text: MutableStateFlow<String> = MutableStateFlow("")
-        override val isBusy: StateFlow<Boolean> = MutableStateFlow(false)
+        override val isBusy: MutableStateFlow<Boolean> = MutableStateFlow(false)
         override val error: StateFlow<Throwable?> = MutableStateFlow(null)
         val submitted = mutableListOf<GHPullRequestReviewEvent>()
         override fun submit(event: GHPullRequestReviewEvent) { submitted += event }
@@ -54,6 +54,25 @@ class ReviewSubmitPopupTest : BasePlatformTestCase() {
         buttons.getValue("Approve").doClick()
         buttons.getValue("Request Changes").doClick()
         assertEquals(listOf(GHPullRequestReviewEvent.APPROVE, GHPullRequestReviewEvent.REQUEST_CHANGES), vm.submitted)
+    }
+
+    fun `test busy disables everything and blank text counts as empty`() {
+        val vm = FakeSubmitVm(viewerIsAuthor = false)
+        val buttons = buttons(vm)
+        vm.text.value = "   "
+        assertFalse(buttons.getValue("Comment").isEnabled)
+        vm.isBusy.value = true
+        assertFalse(buttons.getValue("Approve").isEnabled)
+    }
+
+    fun `test the discard button appears only with a pending review that has comments`() {
+        val defaults = JLabel("x")
+        assertSame(defaults, ReviewSubmitPopup.titleActionsIn(cs, FakeSubmitVm(viewerIsAuthor = false), defaults))
+        val withPending = ReviewSubmitPopup.titleActionsIn(cs, FakeSubmitVm(viewerIsAuthor = false, comments = 2), JLabel("x"))
+        val discard = withPending.components.filterIsInstance<com.intellij.util.ui.InlineIconButton>().single()
+        assertTrue(discard.isVisible)
+        val noComments = ReviewSubmitPopup.titleActionsIn(cs, FakeSubmitVm(viewerIsAuthor = false, comments = 0, pending = true), JLabel("x"))
+        assertFalse(noComments.components.filterIsInstance<com.intellij.util.ui.InlineIconButton>().single().isVisible)
     }
 
     fun `test pending comments alone enable request changes and comment`() {

@@ -16,6 +16,12 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    also for private repositories. Text next to the image wins unless it is just the image's address; copied files
    always count as files. *Paste as Plain Text* always pastes the text.
 
+4. **Submit the review from the IDE** - a *Review…* button in the pull request details next to Merge (and
+   *Submit Review…* in the details, changes and timeline context menus) opens GitHub's palette: Approve,
+   Request Changes, Comment, with a summary field and a way to discard pending comments. It is there in every
+   state, also after someone else already approved, where the bundled plugin hides its own button. Authors can
+   only comment, as on github.com.
+
 ## Requirements
 
 - IntelliJ IDEA 2026.1 to 2026.3 (builds 261 to 263) with the bundled *GitHub* and *Git* plugins enabled.
@@ -46,4 +52,7 @@ Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbo
   comment, the `Dummy.md` file behind the comment editor, the layout of the comment field's action row).
   A major IDE update may need a small follow-up.
 - Uploads go to github.com only; a GitHub Enterprise account gets an error balloon instead.
+- The *Review…* button is recognised by the shape of the details action row, which GitLab merge requests share;
+  it is only added where a GitHub pull request is in the context. The submit flow reuses the GitHub plugin's
+  review model through its pluggable popup handler, an internal API.
 - Reactions on comments stay limited to the eight GitHub allows; that is a GitHub API limit, not an IDE one.
