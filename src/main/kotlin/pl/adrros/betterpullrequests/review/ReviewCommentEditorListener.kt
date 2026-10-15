@@ -17,13 +17,7 @@ import com.intellij.openapi.util.Key
  */
 class ReviewCommentEditorListener : EditorFactoryListener {
     override fun editorCreated(event: EditorFactoryEvent) {
-        val editor = event.editor
-        if (!ReviewCommentEditors.isReviewCommentEditor(editor) || editor.getUserData(DISPOSABLE) != null) return
-        val disposable = Disposer.newDisposable("BetterPullRequests review comment editor")
-        editor.putUserData(DISPOSABLE, disposable)
-        registerShortcut(editor, PASTE_IMAGE_ACTION, KeymapUtil.getActiveKeymapShortcuts(PASTE_ACTION), disposable)
-        registerShortcut(editor, INSERT_EMOJI_ACTION, null, disposable)
-        CommentInputButtons.watch(editor)
+        decorate(event.editor)
     }
 
     override fun editorReleased(event: EditorFactoryEvent) {
@@ -33,16 +27,26 @@ class ReviewCommentEditorListener : EditorFactoryListener {
         }
     }
 
-    /** A registered action must not get its shortcut set changed; the platform asks for a wrapper instead. */
-    private fun registerShortcut(editor: Editor, actionId: String, shortcuts: ShortcutSet?, disposable: Disposable) {
-        val registered = ActionManager.getInstance().getAction(actionId) ?: return
-        ActionUtil.wrap(actionId).registerCustomShortcutSet(shortcuts ?: registered.shortcutSet, editor.contentComponent, disposable)
-    }
-
     companion object {
         private val DISPOSABLE = Key.create<Disposable>("BetterPullRequests.reviewCommentEditor")
         const val PASTE_ACTION = "\$Paste"
         const val PASTE_IMAGE_ACTION = "BetterPullRequests.PasteImage"
         const val INSERT_EMOJI_ACTION = "BetterPullRequests.InsertEmoji"
+
+        /** Also used at plugin start for editors that already exist, e.g. after an install without restart. */
+        fun decorate(editor: Editor) {
+            if (!ReviewCommentEditors.isReviewCommentEditor(editor) || editor.getUserData(DISPOSABLE) != null) return
+            val disposable = Disposer.newDisposable("BetterPullRequests review comment editor")
+            editor.putUserData(DISPOSABLE, disposable)
+            registerShortcut(editor, PASTE_IMAGE_ACTION, KeymapUtil.getActiveKeymapShortcuts(PASTE_ACTION), disposable)
+            registerShortcut(editor, INSERT_EMOJI_ACTION, null, disposable)
+            CommentInputButtons.watch(editor)
+        }
+
+        /** A registered action must not get its shortcut set changed; the platform asks for a wrapper instead. */
+        private fun registerShortcut(editor: Editor, actionId: String, shortcuts: ShortcutSet?, disposable: Disposable) {
+            val registered = ActionManager.getInstance().getAction(actionId) ?: return
+            ActionUtil.wrap(actionId).registerCustomShortcutSet(shortcuts ?: registered.shortcutSet, editor.contentComponent, disposable)
+        }
     }
 }

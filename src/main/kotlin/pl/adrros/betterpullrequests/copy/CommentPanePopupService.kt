@@ -4,11 +4,18 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
+import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import pl.adrros.betterpullrequests.review.ReviewCommentEditorListener
 import java.awt.AWTEvent
 import java.awt.Toolkit
+import java.awt.Window
 import java.awt.event.AWTEventListener
 import java.awt.event.ContainerEvent
 import java.awt.event.MouseEvent
@@ -31,6 +38,15 @@ class CommentPanePopupService : Disposable {
         val installed = AWTEventListener { event -> handle(event) }
         toolkit.addAWTEventListener(installed, AWTEvent.MOUSE_EVENT_MASK or AWTEvent.CONTAINER_EVENT_MASK)
         listener = installed
+        decorateExisting()
+    }
+
+    /** Comments and comment editors built before the plugin was loaded (install without restart) get the same treatment. */
+    private fun decorateExisting() {
+        for (window in Window.getWindows()) {
+            UIUtil.uiTraverser(window).forEach { component -> CommentPanes.asCommentPane(component)?.let(CommentCopyButtons::watch) }
+        }
+        EditorFactory.getInstance().allEditors.forEach(ReviewCommentEditorListener::decorate)
     }
 
     private fun handle(event: AWTEvent) {
@@ -60,6 +76,8 @@ class CommentPanePopupService : Disposable {
 
 class CommentPanePopupInstaller : ProjectActivity {
     override suspend fun execute(project: Project) {
-        service<CommentPanePopupService>().ensureInstalled()
+        withContext(Dispatchers.EDT) {
+            service<CommentPanePopupService>().ensureInstalled()
+        }
     }
 }
