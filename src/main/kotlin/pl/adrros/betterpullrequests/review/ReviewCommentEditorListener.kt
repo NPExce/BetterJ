@@ -2,8 +2,8 @@ package pl.adrros.betterpullrequests.review
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.ShortcutSet
+import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
@@ -33,9 +33,10 @@ class ReviewCommentEditorListener : EditorFactoryListener {
         }
     }
 
+    /** A registered action must not get its shortcut set changed; the platform asks for a wrapper instead. */
     private fun registerShortcut(editor: Editor, actionId: String, shortcuts: ShortcutSet?, disposable: Disposable) {
-        val action: AnAction = ActionManager.getInstance().getAction(actionId) ?: return
-        action.registerCustomShortcutSet(shortcuts ?: action.shortcutSet, editor.contentComponent, disposable)
+        val registered = ActionManager.getInstance().getAction(actionId) ?: return
+        ActionUtil.wrap(actionId).registerCustomShortcutSet(shortcuts ?: registered.shortcutSet, editor.contentComponent, disposable)
     }
 
     companion object {
