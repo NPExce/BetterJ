@@ -78,6 +78,7 @@ class CommentPanePopupInstaller : ProjectActivity {
     override suspend fun execute(project: Project) {
         withContext(Dispatchers.EDT) {
             service<CommentPanePopupService>().ensureInstalled()
+            service<pl.adrros.betterpullrequests.paste.PasteShortcutInterceptor>().ensureInstalled()
         }
     }
 }
