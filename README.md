@@ -7,16 +7,17 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    and a right-click menu with *Copy Comment* and *Copy Selection*. Works in the PR timeline, in diff threads
    and in editor inlays.
 2. **Emoji in comments** - type `:smi` in a comment editor and pick from the completion popup (GitHub short codes,
-   inserted as Unicode glyphs). `Ctrl+Alt+E` opens an emoji picker: a grid of all 1900+ GitHub emoji with a search
-   box and the recently used ones on top. Both are also in the *Edit* menu and the editor context menu.
-3. **Paste screenshots** - `Cmd+V` / `Ctrl+V` with an image on the clipboard (or image files copied from Finder)
-   inserts an `![Uploading …]()` placeholder and uploads the image as a regular GitHub attachment
+   inserted as Unicode glyphs). The 😀 button under the comment field, `Ctrl+Shift+;` or *Edit | Insert Emoji…*
+   opens an emoji picker: a grid of all 1900+ GitHub emoji with a search box and the recently used ones on top.
+3. **Paste screenshots** - the paste shortcut (whatever your keymap binds it to), the image button under the
+   comment field or *Edit | Paste Image as Attachment* with an image on the clipboard (or image files copied from
+   a file manager) inserts an `![Uploading …]()` placeholder and uploads the image as a regular GitHub attachment
    (`github.com/user-attachments/assets/...`). The link renders on github.com, in e-mails and in the IDE,
-   also for private repositories.
+   also for private repositories. Text next to the image wins unless it is just the image's address or name.
 
 ## Requirements
 
-- IntelliJ IDEA 2026.1 (build 261.*) with the bundled *GitHub* and *Git* plugins enabled.
+- IntelliJ IDEA 2026.1 to 2026.3 (builds 261 to 263) with the bundled *GitHub* and *Git* plugins enabled.
 - A GitHub account configured in *Settings | Version Control | GitHub* (the upload reuses its token).
 - Attachments: github.com only. GitHub Enterprise is not supported, the upload endpoint differs.
 
@@ -41,5 +42,7 @@ Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbo
   It is the same endpoint the web UI's attachment box uses and it accepts the IDE's OAuth token today; if GitHub
   changes it, pasting falls back to an error balloon and nothing is lost (the placeholder is removed).
 - The plugin hooks into internal UI details of the GitHub plugin (the name of the HTML pane that renders a
-  comment, the `Dummy.md` file behind the comment editor). A major IDE update may need a small follow-up.
+  comment, the `Dummy.md` file behind the comment editor, the layout of the comment field's action row).
+  A major IDE update may need a small follow-up.
+- Uploads go to github.com only; a GitHub Enterprise account gets an error balloon instead.
 - Reactions on comments stay limited to the eight GitHub allows; that is a GitHub API limit, not an IDE one.
