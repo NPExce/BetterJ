@@ -1,12 +1,14 @@
-# GitHub Review Extras
+# BetterPullRequests
 
 Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA (and other JetBrains IDEs):
 
-1. **Copy review comments** - `Cmd+C` / `Ctrl+C` while a comment has focus copies the selected text, or the
-   whole comment when nothing is selected. A right-click context menu offers *Copy Comment* and *Copy Selection*.
-   Works in the PR timeline, in diff threads and in editor inlays.
+1. **Copy review comments** - a copy button next to edit / delete / react when a comment is hovered,
+   `Cmd+C` / `Ctrl+C` while a comment has focus (selection, or the whole comment when nothing is selected),
+   and a right-click menu with *Copy Comment* and *Copy Selection*. Works in the PR timeline, in diff threads
+   and in editor inlays.
 2. **Emoji in comments** - type `:smi` in a comment editor and pick from the completion popup (GitHub short codes,
-   inserted as Unicode glyphs). `Ctrl+Alt+E` opens a searchable emoji picker (also in the editor context menu).
+   inserted as Unicode glyphs). `Ctrl+Alt+E` opens an emoji picker: a grid of all 1900+ GitHub emoji with a search
+   box and the recently used ones on top. Both are also in the *Edit* menu and the editor context menu.
 3. **Paste screenshots** - `Cmd+V` / `Ctrl+V` with an image on the clipboard (or image files copied from Finder)
    inserts an `![Uploading …]()` placeholder and uploads the image as a regular GitHub attachment
    (`github.com/user-attachments/assets/...`). The link renders on github.com, in e-mails and in the IDE,
@@ -24,7 +26,7 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
 JAVA_HOME=<JDK 21> ./gradlew buildPlugin
 ```
 
-The zip lands in `build/distributions/`. `gradle.properties` points `platformLocalPath` at a local IDE so the
+The zip lands in `build/distributions/` (`BetterPullRequests-<version>.zip`). `gradle.properties` points `platformLocalPath` at a local IDE so the
 build needs no 1 GB download; remove the property to build against a downloaded IntelliJ IDEA Community 2026.1.
 
 Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbox).

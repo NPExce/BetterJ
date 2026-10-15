@@ -1,9 +1,9 @@
 <idea-plugin>
-    <id>pl.adrros.gh-review-extras</id>
-    <name>GitHub Review Extras</name>
+    <id>pl.adrros.betterpullrequests</id>
+    <name>BetterPullRequests</name>
     <vendor>adrros</vendor>
     <description><![CDATA[
-        Small quality-of-life additions to the bundled GitHub Pull Requests review UI:
+        Better pull request reviews inside the IDE - small additions to the bundled GitHub Pull Requests UI:
         <ul>
             <li>Copy review comments (Cmd/Ctrl+C on a comment, or the context menu) - whole comment or the selected part.</li>
             <li>Emoji in review comments: <code>:smile:</code> completion and a searchable emoji picker.</li>
@@ -15,46 +15,51 @@
     <depends>org.jetbrains.plugins.github</depends>
     <depends>Git4Idea</depends>
 
-    <resource-bundle>messages.GhReviewExtrasBundle</resource-bundle>
+    <resource-bundle>messages.BetterPullRequestsBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <notificationGroup id="GitHub Review Extras" displayType="BALLOON"/>
+        <notificationGroup id="BetterPullRequests" displayType="BALLOON"/>
 
-        <postStartupActivity implementation="pl.adrros.ghreviewextras.copy.CommentPanePopupInstaller"/>
+        <postStartupActivity implementation="pl.adrros.betterpullrequests.copy.CommentPanePopupInstaller"/>
 
-        <actionPromoter implementation="pl.adrros.ghreviewextras.review.ReviewActionPromoter"/>
+        <actionPromoter implementation="pl.adrros.betterpullrequests.review.ReviewActionPromoter"/>
 
         <completion.contributor language="any"
-                                implementationClass="pl.adrros.ghreviewextras.emoji.EmojiCompletionContributor"/>
+                                implementationClass="pl.adrros.betterpullrequests.emoji.EmojiCompletionContributor"/>
 
-        <projectService serviceInterface="pl.adrros.ghreviewextras.upload.AttachmentUploadService"
-                        serviceImplementation="pl.adrros.ghreviewextras.upload.GitHubAttachmentUploadService"/>
+        <projectService serviceInterface="pl.adrros.betterpullrequests.upload.AttachmentUploadService"
+                        serviceImplementation="pl.adrros.betterpullrequests.upload.GitHubAttachmentUploadService"/>
     </extensions>
 
     <actions>
-        <action id="GhReviewExtras.CopyComment"
-                class="pl.adrros.ghreviewextras.copy.CopyCommentAction"
-                use-shortcut-of="$Copy"/>
+        <action id="BetterPullRequests.CopyComment"
+                class="pl.adrros.betterpullrequests.copy.CopyCommentAction"
+                use-shortcut-of="$Copy">
+            <add-to-group group-id="EditMenu" anchor="last"/>
+        </action>
 
-        <action id="GhReviewExtras.CopyWholeComment"
-                class="pl.adrros.ghreviewextras.copy.CopyWholeCommentAction"/>
+        <action id="BetterPullRequests.CopyWholeComment"
+                class="pl.adrros.betterpullrequests.copy.CopyWholeCommentAction"/>
 
-        <action id="GhReviewExtras.CopySelectedCommentText"
-                class="pl.adrros.ghreviewextras.copy.CopySelectedCommentTextAction"/>
+        <action id="BetterPullRequests.CopySelectedCommentText"
+                class="pl.adrros.betterpullrequests.copy.CopySelectedCommentTextAction"/>
 
-        <group id="GhReviewExtras.CommentPopup">
-            <reference ref="GhReviewExtras.CopyWholeComment"/>
-            <reference ref="GhReviewExtras.CopySelectedCommentText"/>
+        <group id="BetterPullRequests.CommentPopup">
+            <reference ref="BetterPullRequests.CopyWholeComment"/>
+            <reference ref="BetterPullRequests.CopySelectedCommentText"/>
         </group>
 
-        <action id="GhReviewExtras.PasteImage"
-                class="pl.adrros.ghreviewextras.paste.PasteReviewImageAction"
-                use-shortcut-of="$Paste"/>
+        <action id="BetterPullRequests.PasteImage"
+                class="pl.adrros.betterpullrequests.paste.PasteReviewImageAction"
+                use-shortcut-of="$Paste">
+            <add-to-group group-id="EditMenu" anchor="last"/>
+        </action>
 
-        <action id="GhReviewExtras.InsertEmoji"
-                class="pl.adrros.ghreviewextras.emoji.InsertEmojiAction">
+        <action id="BetterPullRequests.InsertEmoji"
+                class="pl.adrros.betterpullrequests.emoji.InsertEmojiAction">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt E"/>
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="EditMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

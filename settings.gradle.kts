@@ -1,1 +1,1 @@
-rootProject.name = "gh-review-extras"
+rootProject.name = "BetterPullRequests"
