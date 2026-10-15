@@ -10,7 +10,7 @@ import com.intellij.openapi.editor.EditorModificationUtil
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import pl.adrros.ghreviewextras.GhReviewExtrasBundle
 import pl.adrros.ghreviewextras.review.ReviewCommentEditors
 
@@ -28,7 +28,7 @@ class InsertEmojiAction : DumbAwareAction() {
         JBPopupFactory.getInstance()
             .createPopupChooserBuilder(service<EmojiCatalog>().all)
             .setTitle(GhReviewExtrasBundle.message("emoji.picker.title"))
-            .setRenderer(SimpleListCellRenderer.create("") { emoji -> "${emoji.glyph}   ${emoji.shortcode}" })
+            .setRenderer(textListCellRenderer { emoji -> emoji?.let { "${it.glyph}   ${it.shortcode}" } ?: "" })
             .setNamerForFiltering { it.shortcode }
             .setItemChosenCallback { emoji -> insertAtCaret(project, editor, emoji.glyph) }
             .createPopup()
