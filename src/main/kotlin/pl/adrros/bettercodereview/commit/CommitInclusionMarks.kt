@@ -90,6 +90,10 @@ object CommitInclusionMarks {
         synchronized(installed) { installed.toList() }.forEach { tree -> runCatching { uninstall(tree) } }
     }
 
+    fun repaintAll() {
+        synchronized(installed) { installed.toList() }.forEach { it.repaint() }
+    }
+
     /** What identifies a file's content at a moment: the open document's stamp when there is one, and the file's own stamps. */
     data class Stamp(val document: Long, val file: Long, val time: Long) {
         /** A different document stamp counts only when both sides had a document; the file stamps always count. */
@@ -242,7 +246,9 @@ object CommitInclusionMarks {
                     tree.repaint()
                 }
                 state == ThreeStateCheckBox.State.SELECTED && !isMarked(filePath) -> CheckboxClicks.Decision(consume = true) {
-                    tree.selectionPath = path // the consumed release skips the tree's own selection handling
+                    // The consumed release skips the tree UI's own selection and focus handling.
+                    tree.selectionPath = path
+                    tree.requestFocusInWindow()
                     flagged.add(filePath)
                     tree.repaint()
                 }
@@ -256,6 +262,7 @@ object CommitInclusionMarks {
         override fun isSelected(e: AnActionEvent): Boolean = isEnabled
         override fun setSelected(e: AnActionEvent, state: Boolean) {
             isEnabled = state
+            repaintAll()
         }
     }
 }

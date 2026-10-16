@@ -196,6 +196,10 @@ object ReviewChangeTrees {
         tree.repaint()
     }
 
+    fun repaintAll() {
+        synchronized(installed) { installed.toList() }.forEach { it.repaint() }
+    }
+
     /** Trees in hidden tabs are not reachable from any window; the registry remembers them for unload. */
     fun uninstallAll() {
         synchronized(installed) { installed.toList() }.forEach { tree -> runCatching { uninstall(tree) } }

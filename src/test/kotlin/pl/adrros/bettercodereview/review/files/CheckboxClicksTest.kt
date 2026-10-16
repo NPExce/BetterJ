@@ -65,11 +65,35 @@ class CheckboxClicksTest {
     }
 
     @Test
-    fun `the second press of a double-click on a slot is swallowed instead of toggling again`() {
-        CheckboxClicks.register(tree) { CheckboxClicks.Decision(consume = false) { clicks++ } }
+    fun `a click-triggered decision waits for the click and leaves the release alone`() {
+        CheckboxClicks.register(tree) { CheckboxClicks.Decision(consume = true, CheckboxClicks.Trigger.CLICK) { clicks++ } }
+        assertEquals(listOf(false, false), send(event(MouseEvent.MOUSE_PRESSED), event(MouseEvent.MOUSE_RELEASED)))
+        assertEquals("nothing yet: the platform's toggle acts on the click", 0, clicks)
+        assertEquals(listOf(true), send(event(MouseEvent.MOUSE_CLICKED)))
+        assertEquals(1, clicks)
+        // A jittery click: the release arrives, the click never does; neither side acts.
+        send(event(MouseEvent.MOUSE_PRESSED), event(MouseEvent.MOUSE_RELEASED, x = 7, y = 5))
+        assertEquals(listOf(false), send(event(MouseEvent.MOUSE_PRESSED, button = MouseEvent.BUTTON3, popup = true)))
+        assertEquals(1, clicks)
+    }
+
+    @Test
+    fun `the tolerance is the platform's, fewer than four pixels on each axis`() {
+        CheckboxClicks.register(tree) { CheckboxClicks.Decision(consume = true) { clicks++ } }
+        send(event(MouseEvent.MOUSE_PRESSED), event(MouseEvent.MOUSE_RELEASED, x = 8, y = 8), event(MouseEvent.MOUSE_CLICKED, x = 8, y = 8))
+        assertEquals("three pixels on each axis is still a click", 1, clicks)
+        send(event(MouseEvent.MOUSE_PRESSED), event(MouseEvent.MOUSE_RELEASED, x = 9, y = 5))
+        assertEquals("four pixels on one axis is a drag", 1, clicks)
+    }
+
+    @Test
+    fun `every press is decided afresh, also the second of a double-click`() {
+        var asked = 0
+        CheckboxClicks.register(tree) { asked++; CheckboxClicks.Decision(consume = false) { clicks++ } }
         send(event(MouseEvent.MOUSE_PRESSED), event(MouseEvent.MOUSE_RELEASED), event(MouseEvent.MOUSE_CLICKED))
-        assertEquals(listOf(false, true, true), send(event(MouseEvent.MOUSE_PRESSED, clickCount = 2), event(MouseEvent.MOUSE_RELEASED, clickCount = 2), event(MouseEvent.MOUSE_CLICKED, clickCount = 2)))
-        assertEquals("the first click's action ran once", 1, clicks)
+        send(event(MouseEvent.MOUSE_PRESSED, clickCount = 2), event(MouseEvent.MOUSE_RELEASED, clickCount = 2), event(MouseEvent.MOUSE_CLICKED, clickCount = 2))
+        assertEquals(2, asked)
+        assertEquals(2, clicks)
     }
 
     @Test

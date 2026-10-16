@@ -92,15 +92,16 @@ object ViewedStateCycle {
         if (!slot.bounds.contains(point)) return null
         val ticked = slot.checked == true
         val dismissed = overlay.viewedStateOf(relative) == GHPullRequestFileViewedState.DISMISSED
-        // Each outcome also records what the file is about to be, so a quick next click sees it before GitHub answers.
+        // The platform's toggle acts on the click, so the decision does too; each outcome also records what the
+        // file is about to be, so a quick next click sees it before GitHub answers.
+        val click = CheckboxClicks.Trigger.CLICK
         return when (step(ticked, dismissed, overlay.isFlagged(relative))) {
-            Step.NATIVE -> CheckboxClicks.Decision(consume = false) { overlay.assume(relative, GHPullRequestFileViewedState.VIEWED) }
-            Step.FLAG_AND_UNTICK -> CheckboxClicks.Decision(consume = false) {
+            Step.NATIVE -> CheckboxClicks.Decision(consume = false, click) { overlay.assume(relative, GHPullRequestFileViewedState.VIEWED) }
+            Step.FLAG_AND_UNTICK -> CheckboxClicks.Decision(consume = false, click) {
                 overlay.setFlag(relative, true)
                 overlay.assume(relative, GHPullRequestFileViewedState.UNVIEWED)
             }
-            Step.CLEAR_TO_UNTICKED -> CheckboxClicks.Decision(consume = true) {
-                tree.selectionPath = path // the consumed release skips the tree's own selection handling
+            Step.CLEAR_TO_UNTICKED -> CheckboxClicks.Decision(consume = true, click) {
                 overlay.setFlag(relative, false)
                 if (ticked || dismissed) untick(tree, change)
                 overlay.assume(relative, GHPullRequestFileViewedState.UNVIEWED)
@@ -122,6 +123,7 @@ object ViewedStateCycle {
         override fun isSelected(e: AnActionEvent): Boolean = isEnabled
         override fun setSelected(e: AnActionEvent, state: Boolean) {
             isEnabled = state
+            ReviewChangeTrees.repaintAll()
         }
     }
 }

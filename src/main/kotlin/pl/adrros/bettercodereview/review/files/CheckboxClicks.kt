@@ -13,10 +13,13 @@ import javax.swing.JComponent
  * client property of the tree, so it dies with the tree.
  */
 object CheckboxClicks {
-    /** What to do with a press at a point: null when the press is not on a slot this decoration handles. */
-    class Decision(val consume: Boolean, val onClick: () -> Unit)
+    /** The event the platform's own handler acts on; the decision acts on the same one, so a jittery click splits neither way. */
+    enum class Trigger { RELEASE, CLICK }
 
-    private const val HANDLER = "BetterCodeReview.checkboxClickHandler"
+    /** What to do with a press at a point: null when the press is not on a slot this decoration handles. */
+    class Decision(val consume: Boolean, val trigger: Trigger = Trigger.RELEASE, val onClick: () -> Unit)
+
+    const val HANDLER = "BetterCodeReview.checkboxClickHandler"
 
     /** The decided press, waiting for its release: the component, where it was pressed, what to do, and whether it was done. */
     private class Pending(val component: Component, val at: Point, val decision: Decision) {
@@ -46,17 +49,16 @@ object CheckboxClicks {
         when (e.id) {
             MouseEvent.MOUSE_PRESSED -> {
                 if (hasModifiers(e)) return
-                val decision = handler(e.point) ?: return
-                // The second press of a double-click on a slot would make the platform toggle again: swallow it.
-                pending = Pending(e.component, e.point, if (e.clickCount == 1) decision else Decision(consume = true) {})
+                pending = handler(e.point)?.let { Pending(e.component, e.point, it) }
             }
             MouseEvent.MOUSE_RELEASED -> {
-                // The platform's click listeners act on the release too, with the same small tolerance for a jittery click.
                 val current = pending?.takeIf { it.component === e.component } ?: return
-                if (current.at.distance(e.point) > CLICK_SLOP) {
+                if (!withinSlop(current.at, e.point)) {
                     pending = null // dragged away: not a click on the slot, and nothing of ours to run
                     return
                 }
+                if (current.decision.trigger != Trigger.RELEASE) return
+                // The Commit tree's own toggle acts on the release, with the same tolerance for a jittery click.
                 if (current.decision.consume) e.consume()
                 current.done = true
                 current.decision.onClick()
@@ -64,12 +66,20 @@ object CheckboxClicks {
             MouseEvent.MOUSE_CLICKED -> {
                 val current = pending?.takeIf { it.component === e.component } ?: return
                 pending = null
-                if (current.done && current.decision.consume) e.consume()
+                when (current.decision.trigger) {
+                    Trigger.RELEASE -> if (current.done && current.decision.consume) e.consume()
+                    Trigger.CLICK -> {
+                        if (current.decision.consume) e.consume()
+                        current.decision.onClick()
+                    }
+                }
             }
         }
     }
 
-    private const val CLICK_SLOP = 4.0
+    /** The platform's ClickListener tolerance: fewer than four pixels on each axis. */
+    private fun withinSlop(pressed: Point, released: Point): Boolean =
+        kotlin.math.abs(pressed.x - released.x) < 4 && kotlin.math.abs(pressed.y - released.y) < 4
 
     private fun hasModifiers(e: MouseEvent): Boolean =
         e.modifiersEx and (MouseEvent.SHIFT_DOWN_MASK or MouseEvent.CTRL_DOWN_MASK or MouseEvent.META_DOWN_MASK or MouseEvent.ALT_DOWN_MASK) != 0
