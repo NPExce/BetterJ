@@ -37,7 +37,8 @@ object RowSlots {
     /** The dash drawn inside a filled checkbox, like the platform's indeterminate state. */
     val DASH_IN_BOX: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dashInBox", JBColor.namedColor("Checkbox.Foreground.Selected", JBColor(Color.WHITE, Color.WHITE)))
 
-    class Slot(val bounds: Rectangle, val isCheckbox: Boolean)
+    /** [checked] is the checkbox's own state, the same the platform's toggles read; null for the unread dot. */
+    class Slot(val bounds: Rectangle, val isCheckbox: Boolean, val checked: Boolean?)
 
     // The unread-dot icon lives in experimental API; a build that renames it must not fail every paint.
     private var unreadIconAvailable = true
@@ -55,7 +56,13 @@ object RowSlots {
         }
     }
 
-    /** Where a row's renderer is painted: the platform UI stretches it to the visible width, which puts a right-hand slot at the edge. */
+    private fun isNewUi(): Boolean = try {
+        com.intellij.ui.ExperimentalUI.isNewUI()
+    } catch (e: LinkageError) {
+        true
+    }
+
+    /** Where a row's renderer is painted: the platform UI stretches it to the visible width, so a right-hand slot sits at the edge. */
     fun paintedRowBounds(tree: JTree, path: TreePath): Rectangle? = actualBounds(tree, path) ?: tree.getPathBounds(path)
 
     // CustomBoundsTreeUI is experimental API; a build without it must not fail every paint.
@@ -79,7 +86,7 @@ object RowSlots {
         val renderer = tree.cellRenderer.getTreeCellRendererComponent(tree, node, tree.isRowSelected(row), tree.isExpanded(row), leaf, row, false) as? JComponent ?: return null
         renderer.setBounds(0, 0, bounds.width, bounds.height)
         UIUtil.layoutRecursively(renderer)
-        val slot = UIUtil.uiTraverser(renderer).filter(Component::class.java).firstOrNull { isStateSlot(it) && it.isVisible }
+        val slot = UIUtil.uiTraverser(renderer).filter(Component::class.java).firstOrNull { isStateSlot(it) && isShownWithin(it, renderer) }
         if (slot == null || slot.width == 0) {
             if (!missingLogged) {
                 missingLogged = true
@@ -89,7 +96,17 @@ object RowSlots {
         }
         val inRenderer = SwingUtilities.convertRectangle(slot.parent, slot.bounds, renderer)
         inRenderer.translate(bounds.x, bounds.y)
-        return Slot(inRenderer, slot is JCheckBox)
+        return Slot(inRenderer, slot is JCheckBox, (slot as? JCheckBox)?.isSelected)
+    }
+
+    /** Visible itself and in every container up to the renderer: a hidden container keeps its children's last bounds. */
+    private fun isShownWithin(component: Component, renderer: JComponent): Boolean {
+        var current: Component? = component
+        while (current != null && current !== renderer) {
+            if (!current.isVisible) return false
+            current = current.parent
+        }
+        return true
     }
 
     /**
@@ -104,17 +121,17 @@ object RowSlots {
             val box = slot.bounds
             val side = minOf(box.width, box.height)
             if (slot.isCheckbox) {
-                val inset = JBUI.scale(2)
-                val size = side - 2 * inset
+                // The platform's indeterminate icon: a 16px box (14 in the classic UI) with a 3px corner radius and an 11x2 rounded dash.
+                val size = JBUI.scale(if (isNewUi()) 16 else 14).coerceAtMost(side)
                 val x = box.x + (box.width - size) / 2
                 val y = box.y + (box.height - size) / 2
-                val arc = JBUI.scale(4)
+                val arc = JBUI.scale(6)
                 g2.color = DASH
                 g2.fillRoundRect(x, y, size, size, arc, arc)
-                val dashWidth = (size * 0.55).toInt().coerceAtLeast(JBUI.scale(6))
+                val dashWidth = (size * 11 / 16).coerceAtLeast(JBUI.scale(6))
                 val dashHeight = JBUI.scale(2)
                 g2.color = DASH_IN_BOX
-                g2.fillRect(x + (size - dashWidth) / 2, y + (size - dashHeight) / 2, dashWidth, dashHeight)
+                g2.fillRoundRect(x + (size - dashWidth) / 2, y + (size - dashHeight) / 2, dashWidth, dashHeight, dashHeight, dashHeight)
             } else {
                 val dashWidth = (side * 0.6).toInt().coerceAtLeast(JBUI.scale(8))
                 val dashHeight = JBUI.scale(2)

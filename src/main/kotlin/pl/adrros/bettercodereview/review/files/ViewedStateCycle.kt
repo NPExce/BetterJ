@@ -2,7 +2,12 @@ package pl.adrros.bettercodereview.review.files
 
 import com.intellij.collaboration.ui.codereview.details.model.CodeReviewChangeListViewModel
 import com.intellij.collaboration.util.RefComparisonChange
+import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.util.ui.tree.TreeUtil
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
@@ -16,10 +21,17 @@ private val LOG = logger<ViewedStateCycle>()
  * Turns the two-state "viewed" checkbox of the pull request tree into a cycle: a ticked file clicked once shows a
  * dash ("read it again"), clicked again becomes unticked, clicked again is ticked. A file GitHub itself dismissed
  * after new commits shows the same dash and follows the same path. GitHub stores only ticked or not: the dash is
- * the plugin's own flag ([ReviewFlags]) on top of an unticked file.
+ * the plugin's own flag ([ReviewFlags]) on top of an unticked file. Whether a file is ticked is read from the
+ * checkbox the renderer shows, which is what the platform's own toggle reads too, so both decide from one state.
  */
 object ViewedStateCycle {
-    private const val NATIVE_TOGGLE = "com.intellij.collaboration.ui.codereview.CodeReviewProgressTreeModelKt\$installViewedStateToggleHandler"
+    // 2026.1 names the listener installViewedStateToggleHandler$1, 2026.3 installRendererComponentClickHandler$1 (also used for jump-to-source, harmless to wrap).
+    private const val NATIVE_TOGGLE = "com.intellij.collaboration.ui.codereview.CodeReviewProgressTreeModelKt\$install"
+    private const val SETTING = "BetterCodeReview.viewedCheckboxCycle"
+
+    var isEnabled: Boolean
+        get() = PropertiesComponent.getInstance().getBoolean(SETTING, true)
+        set(value) = PropertiesComponent.getInstance().setValue(SETTING, value, true)
 
     enum class Step {
         /** Let the platform untick the file, and flag it: the row shows the dash. */
@@ -30,10 +42,10 @@ object ViewedStateCycle {
         NATIVE,
     }
 
-    fun step(state: GHPullRequestFileViewedState?, flagged: Boolean): Step = when {
+    fun step(ticked: Boolean, dismissed: Boolean, flagged: Boolean): Step = when {
         flagged -> Step.CLEAR_TO_UNTICKED
-        state == GHPullRequestFileViewedState.VIEWED -> Step.FLAG_AND_UNTICK
-        state == GHPullRequestFileViewedState.DISMISSED -> Step.CLEAR_TO_UNTICKED
+        ticked -> Step.FLAG_AND_UNTICK
+        dismissed -> Step.CLEAR_TO_UNTICKED
         else -> Step.NATIVE
     }
 
@@ -46,27 +58,30 @@ object ViewedStateCycle {
         override fun mouseExited(e: MouseEvent) = delegate.mouseExited(e)
     }
 
-    fun install(tree: ChangesTree, overlay: ReviewChangeTrees.CurrentFileOverlay) {
-        for (listener in tree.mouseListeners) {
-            if (listener.javaClass.name.startsWith(NATIVE_TOGGLE)) {
-                tree.removeMouseListener(listener)
-                tree.addMouseListener(ConsumedAwareListener(listener))
-            }
+    /** Installs the cycle when the platform's toggle is where the plugin expects it; otherwise the click would tick the file anyway. */
+    fun install(tree: ChangesTree, overlay: ReviewChangeTrees.CurrentFileOverlay): Boolean {
+        val listeners = tree.mouseListeners
+        if (listeners.none { it.javaClass.name.startsWith(NATIVE_TOGGLE) }) {
+            LOG.warn("Viewed checkbox cycle off: the platform's viewed-state toggle was not found among ${listeners.size} mouse listener(s): ${listeners.map { it.javaClass.name }}")
+            return false
         }
+        // Rewrap in place, so the listener order the platform set up stays as it was.
+        listeners.forEach(tree::removeMouseListener)
+        listeners.forEach { tree.addMouseListener(if (it.javaClass.name.startsWith(NATIVE_TOGGLE)) ConsumedAwareListener(it) else it) }
         CheckboxClicks.register(tree) { point -> decide(tree, overlay, point) }
+        return true
     }
 
     fun uninstall(tree: ChangesTree) {
         CheckboxClicks.unregister(tree)
-        for (listener in tree.mouseListeners) {
-            if (listener is ConsumedAwareListener) {
-                tree.removeMouseListener(listener)
-                tree.addMouseListener(listener.delegate)
-            }
-        }
+        val listeners = tree.mouseListeners
+        if (listeners.none { it is ConsumedAwareListener }) return
+        listeners.forEach(tree::removeMouseListener)
+        listeners.forEach { tree.addMouseListener((it as? ConsumedAwareListener)?.delegate ?: it) }
     }
 
     private fun decide(tree: ChangesTree, overlay: ReviewChangeTrees.CurrentFileOverlay, point: Point): CheckboxClicks.Decision? {
+        if (!isEnabled) return null
         val row = tree.getClosestRowForLocation(point.x, point.y).takeIf { it >= 0 } ?: return null
         val path = tree.getPathForRow(row) ?: return null
         if (!tree.model.isLeaf(path.lastPathComponent)) return null
@@ -75,13 +90,20 @@ object ViewedStateCycle {
         val relative = overlay.relativePath(nodePath) ?: return null
         val slot = RowSlots.stateSlot(tree, path, row) ?: return null
         if (!slot.bounds.contains(point)) return null
-        val state = overlay.viewedStateOf(relative)
-        return when (step(state, overlay.isFlagged(relative))) {
-            Step.NATIVE -> null
-            Step.FLAG_AND_UNTICK -> CheckboxClicks.Decision(consume = false) { overlay.setFlag(relative, true) }
+        val ticked = slot.checked == true
+        val dismissed = overlay.viewedStateOf(relative) == GHPullRequestFileViewedState.DISMISSED
+        // Each outcome also records what the file is about to be, so a quick next click sees it before GitHub answers.
+        return when (step(ticked, dismissed, overlay.isFlagged(relative))) {
+            Step.NATIVE -> CheckboxClicks.Decision(consume = false) { overlay.assume(relative, GHPullRequestFileViewedState.VIEWED) }
+            Step.FLAG_AND_UNTICK -> CheckboxClicks.Decision(consume = false) {
+                overlay.setFlag(relative, true)
+                overlay.assume(relative, GHPullRequestFileViewedState.UNVIEWED)
+            }
             Step.CLEAR_TO_UNTICKED -> CheckboxClicks.Decision(consume = true) {
+                tree.selectionPath = path // the consumed release skips the tree's own selection handling
                 overlay.setFlag(relative, false)
-                if (state != GHPullRequestFileViewedState.UNVIEWED) untick(tree, change)
+                if (ticked || dismissed) untick(tree, change)
+                overlay.assume(relative, GHPullRequestFileViewedState.UNVIEWED)
             }
         }
     }
@@ -93,5 +115,13 @@ object ViewedStateCycle {
             return
         }
         model.setViewedState(listOf(change), false)
+    }
+
+    class ToggleCycleAction : ToggleAction(), DumbAware {
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+        override fun isSelected(e: AnActionEvent): Boolean = isEnabled
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            isEnabled = state
+        }
     }
 }

@@ -38,24 +38,32 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    it, and the bundled plugin then shows the same unread dot as for a file never looked at (the checkbox itself only
    appears under the mouse). The plugin paints a dash over that slot: dot = not viewed, tick = viewed, dash = viewed
    before, changed since. Clicking cycles the states: a ticked file clicked once shows the dash ("read it again"),
-   clicked again is unticked, clicked again is ticked; a file GitHub dismissed follows the same path. GitHub only
-   stores ticked or not, so the dash after a click is the plugin's own flag, kept per project and pull request.
+   clicked again is unticked, clicked again is ticked; a file GitHub dismissed follows the same path, and that
+   click unticks it on GitHub. GitHub only stores ticked or not, so the dash after a click is the plugin's own flag,
+   kept per project and pull request (the newest 500) and dropped when the file is ticked elsewhere. The cycle acts
+   on plain left clicks on the checkbox; the keyboard and the context menu's own toggles go straight to GitHub.
+   *Viewed Checkbox Cycles Through Dash* in the tree's context menu switches the cycle off.
    Theme keys: `BetterCodeReview.ViewedDismissed.dash` (defaults to the theme's selected checkbox colour),
    `.dashOnCurrent` for the row of the open file and `.dashInBox` for the dash inside a checkbox.
-9. **Commit window: see which ticked files changed** - the checkboxes in the Commit tool window choose what goes
-   into the commit. A ticked file whose content changed since it was ticked (edited by you, or written on disk by a
-   tool such as a coding agent) shows a dash in its checkbox; so does a ticked file you click once, to mark it for
-   another look. A dashed file is still part of the commit. Clicking a dashed file unticks it as usual, and ticking
-   it again takes its current content as the new baseline. The baseline of files already ticked when the plugin
-   first sees the tree is their content at that moment. Keyboard toggling (Space) skips the dash step.
 8. **Double-click opens the file** - double-click or Enter on a file in the pull request's tree opens the file
    in the editor, which is what reading on the checked-out branch calls for; Alt+double-click and *Show Diff*
    in the context menu open the diff as before (the platform ignores Enter with modifiers, so there is no
    keyboard variant). When the pull request's branch is not the one checked out, the diff opens and a balloon
    says why, once per tree. "Checked out" means the branch, not that the working copy equals the pull request's
    head: unpulled commits or local edits can make line comments point elsewhere. Only the tree of the whole GitHub
-   pull request is affected: in the tree of a single commit, and in a GitLab merge request, the diff opens as before. *Double-Click Opens File* in the tree's context menu
-   switches the behaviour off.
+   pull request is affected: in the tree of a single commit, and in a GitLab merge request, the diff opens as before.
+   *Double-Click Opens File* in the tree's context menu switches the behaviour off.
+9. **Commit window: see which ticked files changed** - the checkboxes in the Commit tool window choose what goes
+   into the commit. A file you ticked by clicking its checkbox shows a dash once it is modified afterwards: edited in
+   the editor, saved, rewritten on disk by a tool such as a coding agent, or deleted. Any rewrite counts, also one that
+   leaves the content as it was, and reverting the edit does not take the dash away; untick and tick again does. A
+   ticked file you click once gets the dash too, to mark it for another look. A dashed file is still part of the
+   commit. Clicking a dashed file unticks it as usual, and ticking it again takes its current content as the new
+   baseline. Files the IDE ticks on its own, files ticked before the plugin saw the tree, and files ticked with the
+   keyboard get no baseline, so they never dash by themselves. Baselines and these flags live in memory only. A file
+   with only some of its lines included keeps the platform's own indeterminate box and is left alone. The cycle acts
+   on plain left clicks; modifier-clicks and Space go straight to the platform. *Dash Changed or Flagged Files* in
+   the tree's context menu switches the feature off.
 
 ## Requirements
 

@@ -88,18 +88,31 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
     fun `test the inclusion checkbox is the slot and a ticked unchanged file has no dash`() {
         val slot = RowSlots.stateSlot(tree, TreePath(nodeA.path), 0)!!
         assertTrue("the platform's inclusion renderer puts the checkbox on the left", slot.isCheckbox && slot.bounds.x < tree.width / 2)
+        assertEquals(true, slot.checked)
         val image = render()
         assertEquals(0, dashPixels(image, nodeA))
         assertEquals(0, dashPixels(image, nodeB))
     }
 
-    fun `test a ticked file that changed since gets the dash, an unticked one never`() {
-        assertEquals("baseline taken at install", 0, dashPixels(render(), nodeA))
+    /** B is unticked in setUp; clicking its checkbox is the platform's tick, remembered as a tick by hand. */
+    private fun tickByClick(node: ChangesBrowserNode<*>, change: Change) {
+        val decision = overlay.decide(slotCentre(node))
+        assertNotNull("an unticked file is the platform's, but noted", decision)
+        assertFalse(decision!!.consume)
+        decision.onClick()
+        tree.includeChange(change)
+        overlay.syncInclusion()
+    }
+
+    fun `test only a file ticked by a click gets a baseline and dashes when modified or deleted`() {
+        tickByClick(nodeB, changeB)
         stamps[a] = CommitInclusionMarks.Stamp(-1, 2, 100)
         stamps[b] = CommitInclusionMarks.Stamp(-1, 2, 100)
         val image = render()
-        assertTrue("dash inside A's checkbox", dashPixels(image, nodeA) > 0)
-        assertEquals("B is not ticked", 0, dashPixels(image, nodeB))
+        assertEquals("A was ticked before the plugin saw it: no baseline, no dash", 0, dashPixels(image, nodeA))
+        assertTrue("B was ticked by a click and changed since", dashPixels(image, nodeB) > 0)
+        stamps.remove(b)
+        assertTrue("a deleted file is the biggest change", overlay.isMarked(b))
     }
 
     fun `test the document stamp counts only when both sides had a document`() {
@@ -124,9 +137,9 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         decision.onClick()
         assertTrue(tree.isIncluded(changeA))
         assertTrue(overlay.isFlagged(a))
+        assertEquals("the consumed release skipped the tree's selection, so the decision selected the row", TreePath(nodeA.path), tree.selectionPath)
         assertTrue(dashPixels(render(), nodeA) > 0)
         assertNull("the dash click unticks through the platform", overlay.decide(slotCentre(nodeA)))
-        assertNull("an unticked file ticks through the platform", overlay.decide(slotCentre(nodeB)))
         assertNull("outside the checkbox nothing is ours", overlay.decide(Point(tree.width - 5, slotCentre(nodeA).y)))
     }
 
@@ -137,21 +150,53 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         overlay.syncInclusion()
         assertFalse(overlay.isFlagged(a))
         stamps[a] = CommitInclusionMarks.Stamp(-1, 5, 500)
-        tree.setIncludedChanges(listOf(changeA))
-        overlay.syncInclusion()
+        tickByClick(nodeA, changeA)
         assertFalse("ticked again with the current content as baseline", overlay.isMarked(a))
         stamps[a] = CommitInclusionMarks.Stamp(-1, 6, 600)
         assertTrue(overlay.isMarked(a))
     }
 
+    fun `test a partially included file is the platform's alone`() {
+        val platform = tree.inclusionModel
+        tree.setInclusionModel(object : com.intellij.openapi.vcs.changes.InclusionModel by platform {
+            override fun getInclusionState(item: Any): com.intellij.util.ui.ThreeStateCheckBox.State =
+                if (item == changeA) com.intellij.util.ui.ThreeStateCheckBox.State.DONT_CARE else platform.getInclusionState(item)
+        })
+        tree.setIncludedChanges(listOf(changeA))
+        render()
+        assertNull("a partial inclusion toggles through the platform", overlay.decide(slotCentre(nodeA)))
+        stamps[a] = CommitInclusionMarks.Stamp(-1, 9, 900)
+        assertEquals("and never gets our dash", 0, dashPixels(render(), nodeA))
+    }
+
+    fun `test without checkboxes or when switched off nothing is ours`() {
+        render()
+        val at = slotCentre(nodeA) // without checkboxes the renderer has no slot at all
+        tree.setShowCheckboxes(false)
+        assertNull(overlay.decide(at))
+        tree.setShowCheckboxes(true)
+        CommitInclusionMarks.isEnabled = false
+        try {
+            assertNull(overlay.decide(at))
+        } finally {
+            CommitInclusionMarks.isEnabled = true
+        }
+        assertNotNull(overlay.decide(at))
+    }
+
     fun `test uninstall removes the overlay and the click handler`() {
+        render()
+        val at = slotCentre(nodeA)
+        fun pressAndRelease(): Boolean {
+            CheckboxClicks.intercept(java.awt.event.MouseEvent(tree, java.awt.event.MouseEvent.MOUSE_PRESSED, 0, 0, at.x, at.y, 1, false, java.awt.event.MouseEvent.BUTTON1))
+            val release = java.awt.event.MouseEvent(tree, java.awt.event.MouseEvent.MOUSE_RELEASED, 0, 0, at.x, at.y, 1, false, java.awt.event.MouseEvent.BUTTON1)
+            CheckboxClicks.intercept(release)
+            return release.isConsumed
+        }
+        assertTrue("before uninstall the release on a ticked file is ours", pressAndRelease())
         CommitInclusionMarks.uninstall(tree)
         assertEmpty(tree.components.filterIsInstance<CommitInclusionMarks.InclusionOverlay>())
-        val press = java.awt.event.MouseEvent(tree, java.awt.event.MouseEvent.MOUSE_PRESSED, 0, 0, 5, 5, 1, false, java.awt.event.MouseEvent.BUTTON1)
-        CheckboxClicks.intercept(press)
-        val click = java.awt.event.MouseEvent(tree, java.awt.event.MouseEvent.MOUSE_CLICKED, 0, 0, 5, 5, 1, false, java.awt.event.MouseEvent.BUTTON1)
-        CheckboxClicks.intercept(click)
-        assertFalse(click.isConsumed)
+        assertFalse(pressAndRelease())
         CommitInclusionMarks.install(tree)
     }
 }

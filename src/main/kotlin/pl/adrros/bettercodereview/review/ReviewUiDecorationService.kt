@@ -65,9 +65,10 @@ class ReviewUiDecorationService : Disposable {
     private fun handle(event: AWTEvent) {
         when {
             event is ContainerEvent && event.id == ContainerEvent.COMPONENT_ADDED -> decorate(event.child)
-            event is MouseEvent && event.isPopupTrigger ->
-                CommentPanes.asCommentPane(event.component)?.let { showPopup(it, event) }
-            event is MouseEvent -> CheckboxClicks.intercept(event)
+            event is MouseEvent -> {
+                CheckboxClicks.intercept(event)
+                if (event.isPopupTrigger) CommentPanes.asCommentPane(event.component)?.let { showPopup(it, event) }
+            }
         }
     }
 
@@ -76,7 +77,7 @@ class ReviewUiDecorationService : Disposable {
         guarded { CommentPanes.asCommentPane(component)?.let(CommentCopyButtons::watch) }
         guarded { (component as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch) }
         guarded { (component as? ChangesTree)?.takeIf(ReviewChangeTrees::isReviewChangesTree)?.let(ReviewChangeTrees::watch) }
-        guarded { (component as? ChangesListView)?.takeIf(CommitInclusionMarks::isCommitTree)?.let(CommitInclusionMarks::watch) }
+        guarded { (component as? ChangesListView)?.let(CommitInclusionMarks::watch) }
     }
 
     private fun showPopup(pane: JEditorPane, event: MouseEvent) {

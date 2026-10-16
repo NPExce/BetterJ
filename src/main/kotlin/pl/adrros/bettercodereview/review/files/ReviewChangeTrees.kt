@@ -74,9 +74,9 @@ object ReviewChangeTrees {
     /** Dark digits read on amber in both themes (white would fall below 3:1). */
     val PENDING_TEXT: Color = JBColor.namedColor("BetterCodeReview.PendingComments.text", JBColor(Color(0x1F, 0x1F, 0x1F), Color(0x1F, 0x1F, 0x1F)))
 
-    /** The pull request behind the tree, as a key for the reviewer's own flags; headless tests replace it. */
-    var pullRequestKeyOf: (JTree) -> String? = { tree ->
-        DataManager.getInstance().getDataContext(tree).getData(org.jetbrains.plugins.github.pullrequest.action.GHPRActionKeys.PULL_REQUEST_ID)?.let { "pr-${it.number}" }
+    /** The pull request's number behind the tree, for the reviewer's own flags; headless tests replace it. */
+    var pullRequestNumberOf: (JTree) -> Long? = { tree ->
+        DataManager.getInstance().getDataContext(tree).getData(org.jetbrains.plugins.github.pullrequest.action.GHPRActionKeys.PULL_REQUEST_ID)?.number
     }
 
     /** Finds the change list model above the tree; headless tests, whose data contexts are empty, replace it. */
@@ -107,7 +107,7 @@ object ReviewChangeTrees {
         if (tree is ChangesTree) {
             overlay.marksJob = followReviewData(tree, overlay)
             overlay.handlers = TreeOpensFile.install(tree)
-            ViewedStateCycle.install(tree, overlay)
+            overlay.cycleInstalled = ViewedStateCycle.install(tree, overlay)
         }
         tree.repaint()
     }
@@ -144,7 +144,9 @@ object ReviewChangeTrees {
         }
         log("Tree marks following pull request data under ${source.repositoryRootPath}")
         overlay.repositoryRootPath = source.repositoryRootPath
-        overlay.pullRequestKey = pullRequestKeyOf(tree) ?: source.repositoryRootPath
+        val number = pullRequestNumberOf(tree)
+        if (number == null) log("Viewed checkbox cycle off: no pull request id in the tree's data context") // GitHub's state still gets its dash
+        overlay.pullRequestKey = number?.let { "${source.repositoryRootPath}#$it" }
         // Each collector fails on its own: a GitHub plugin change breaking one mark must not take the other down.
         launch {
             collectMarks("pending comments") {
@@ -183,7 +185,7 @@ object ReviewChangeTrees {
                 it.stopPulsing()
                 it.marksJob?.cancel()
                 it.handlers?.let { handlers -> (tree as? ChangesTree)?.let { changesTree -> TreeOpensFile.uninstall(changesTree, handlers) } }
-                (tree as? ChangesTree)?.let(ViewedStateCycle::uninstall)
+                if (it.cycleInstalled) (tree as? ChangesTree)?.let(ViewedStateCycle::uninstall)
                 it.detachFlags()
                 tree.removeComponentListener(it.resizeListener)
                 it.currentFile.untrack(tree)
@@ -233,25 +235,52 @@ object ReviewChangeTrees {
 
         var repositoryRootPath: String? = null
         var pullRequestKey: String? = null
+        var cycleInstalled = false
 
         private val flagsListener: () -> Unit = { repaint() }
         private var flagsAttached = false
-        private val flags: ReviewFlags by lazy {
-            flagsAttached = true
-            ((tree as? ChangesTree)?.project ?: currentFile.project).service<ReviewFlags>().also { it.addListener(flagsListener) }
+        private val flags: ReviewFlags by lazy { ((tree as? ChangesTree)?.project ?: currentFile.project).service<ReviewFlags>() }
+
+        /** The flag listener lives only while the overlay is in a hierarchy, so a closed tab does not keep the tree alive. */
+        override fun addNotify() {
+            super.addNotify()
+            if (!flagsAttached) {
+                flags.addListener(flagsListener)
+                flagsAttached = true
+            }
+        }
+
+        override fun removeNotify() {
+            pulse.stop()
+            detachFlags()
+            super.removeNotify()
+        }
+
+        /** What a click just made the file, before GitHub confirms it; no flag is cleared on this path. */
+        fun assume(relativePath: String, state: GHPullRequestFileViewedState) {
+            viewedStatesField = viewedStatesField + (relativePath to state)
+            refreshDismissed()
+            repaint()
+        }
+
+        private var viewedStatesField: Map<String, GHPullRequestFileViewedState> = emptyMap()
+
+        private fun refreshDismissed() {
+            dismissed = repositoryRootPath?.let { PendingMarks.of(it, ReviewDataSource.dismissedPaths(viewedStatesField)) } ?: PendingMarks.NONE
         }
 
         /** GitHub's viewed state per repository-relative path; a transition into "viewed" takes the reviewer's flag off. */
-        var viewedStates: Map<String, GHPullRequestFileViewedState> = emptyMap()
+        var viewedStates: Map<String, GHPullRequestFileViewedState>
+            get() = viewedStatesField
             set(value) {
-                val before = field
-                field = value
+                val before = viewedStatesField
+                viewedStatesField = value
                 if (pullRequestKey != null) {
                     for ((path, state) in value) {
                         if (state == GHPullRequestFileViewedState.VIEWED && before[path] != state && isFlagged(path)) setFlag(path, false)
                     }
                 }
-                dismissed = repositoryRootPath?.let { PendingMarks.of(it, ReviewDataSource.dismissedPaths(value)) } ?: PendingMarks.NONE
+                refreshDismissed()
             }
 
         fun relativePath(path: FilePath): String? = repositoryRootPath?.let { FileUtil.getRelativePath(it, path.path, '/') }
@@ -270,7 +299,10 @@ object ReviewChangeTrees {
         }
 
         fun detachFlags() {
-            if (flagsAttached) flags.removeListener(flagsListener)
+            if (flagsAttached) {
+                flags.removeListener(flagsListener)
+                flagsAttached = false
+            }
         }
 
         private var phase = 0
@@ -296,11 +328,6 @@ object ReviewChangeTrees {
         private fun tintAlpha(): Int {
             val wave = (sin(2 * PI * phase / PULSE_PERIOD_MS) + 1) / 2
             return (TINT_ALPHA_MIN + wave * (TINT_ALPHA_MAX - TINT_ALPHA_MIN)).roundToInt()
-        }
-
-        override fun removeNotify() {
-            pulse.stop()
-            super.removeNotify()
         }
 
         fun stopPulsing() = pulse.stop()
@@ -329,7 +356,8 @@ object ReviewChangeTrees {
                 if (isCurrent) paintMark(g, bounds, visible)
                 val leaf = tree.model.isLeaf(path.lastPathComponent)
                 if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf)
-                if (leaf && (dismissed.countFor(nodePath) > 0 || relativePath(nodePath)?.let(::isFlagged) == true)) paintDismissedDash(g, path, row, isCurrent)
+                val flagged = ViewedStateCycle.isEnabled && relativePath(nodePath)?.let(::isFlagged) == true
+                if (leaf && (dismissed.countFor(nodePath) > 0 || flagged)) paintDismissedDash(g, path, row, isCurrent)
             }
             lastMark = marked
             if (marked != null && isShowing) pulse.start() else pulse.stop()

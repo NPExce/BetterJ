@@ -15,9 +15,9 @@
                 you are and mark it as viewed; files with your not-yet-submitted review comments get an amber bar and a count;
                 a file you viewed before new commits arrived gets a dash over its viewed-state slot. Clicking a ticked file
                 cycles tick, dash ("read it again"), empty.</li>
-            <li>In the Commit tool window a ticked file that changed since you ticked it (by you or by a tool editing on disk)
+            <li>In the Commit tool window a file you ticked that changed since (edited by you or written on disk by a tool)
                 shows a dash in its checkbox, and clicking a ticked file first shows the dash, then unticks it; the file stays in
-                the commit while dashed.</li>
+                the commit while dashed. Both click cycles can be switched off in the trees' context menus.</li>
             <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
                 checked out); Alt+double-click opens the diff as before. Switchable in the tree's context menu.</li>
         </ul>
@@ -89,6 +89,16 @@
         <action id="BetterCodeReview.TreeOpensFile"
                 class="pl.adrros.bettercodereview.review.files.TreeOpensFile$ToggleOpensFileAction">
             <add-to-group group-id="Github.PullRequest.Changes.Popup" anchor="last"/>
+        </action>
+
+        <action id="BetterCodeReview.ViewedCheckboxCycle"
+                class="pl.adrros.bettercodereview.review.files.ViewedStateCycle$ToggleCycleAction">
+            <add-to-group group-id="Github.PullRequest.Changes.Popup" anchor="last"/>
+        </action>
+
+        <action id="BetterCodeReview.CommitCheckboxMarks"
+                class="pl.adrros.bettercodereview.commit.CommitInclusionMarks$ToggleMarksAction">
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
         </action>
 
         <action id="BetterCodeReview.InsertEmoji"

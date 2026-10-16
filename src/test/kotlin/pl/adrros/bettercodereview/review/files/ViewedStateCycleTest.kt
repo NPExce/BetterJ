@@ -1,6 +1,5 @@
 package pl.adrros.bettercodereview.review.files
 
-import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.awt.event.MouseEvent
@@ -10,12 +9,11 @@ import javax.swing.JPanel
 class ViewedStateCycleTest {
     @Test
     fun `ticked goes to the dash, the dash goes to unticked, unticked goes to the platform`() {
-        assertEquals(ViewedStateCycle.Step.FLAG_AND_UNTICK, ViewedStateCycle.step(GHPullRequestFileViewedState.VIEWED, flagged = false))
-        assertEquals(ViewedStateCycle.Step.CLEAR_TO_UNTICKED, ViewedStateCycle.step(GHPullRequestFileViewedState.UNVIEWED, flagged = true))
-        assertEquals(ViewedStateCycle.Step.CLEAR_TO_UNTICKED, ViewedStateCycle.step(GHPullRequestFileViewedState.VIEWED, flagged = true))
-        assertEquals(ViewedStateCycle.Step.CLEAR_TO_UNTICKED, ViewedStateCycle.step(GHPullRequestFileViewedState.DISMISSED, flagged = false))
-        assertEquals(ViewedStateCycle.Step.NATIVE, ViewedStateCycle.step(GHPullRequestFileViewedState.UNVIEWED, flagged = false))
-        assertEquals(ViewedStateCycle.Step.NATIVE, ViewedStateCycle.step(null, flagged = false))
+        assertEquals(ViewedStateCycle.Step.FLAG_AND_UNTICK, ViewedStateCycle.step(ticked = true, dismissed = false, flagged = false))
+        assertEquals(ViewedStateCycle.Step.CLEAR_TO_UNTICKED, ViewedStateCycle.step(ticked = false, dismissed = false, flagged = true))
+        assertEquals(ViewedStateCycle.Step.CLEAR_TO_UNTICKED, ViewedStateCycle.step(ticked = true, dismissed = false, flagged = true))
+        assertEquals(ViewedStateCycle.Step.CLEAR_TO_UNTICKED, ViewedStateCycle.step(ticked = false, dismissed = true, flagged = false))
+        assertEquals(ViewedStateCycle.Step.NATIVE, ViewedStateCycle.step(ticked = false, dismissed = false, flagged = false))
     }
 
     @Test
