@@ -97,10 +97,13 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
     }
 
     fun `test files with pending comments get an amber bar and a count, beside the purple bar when current`() {
+        // Files sit under a folder, as in the grouped pull request tree, so the indentation has room for the badge.
         val current = DefaultMutableTreeNode(change("/repo/src/Current.java"))
         val pendingOnly = DefaultMutableTreeNode(change("/repo/src/Other.java"))
         val plain = DefaultMutableTreeNode(change("/repo/src/Plain.java"))
-        val tree = treeWith(current, pendingOnly, plain)
+        val folder = DefaultMutableTreeNode(LocalFilePath("/repo/src", true)).apply { add(current); add(pendingOnly); add(plain) }
+        val tree = treeWith(folder)
+        tree.expandRow(0)
         val overlay = overlays(tree).single()
         project.service<CurrentReviewFile>().update(LocalFilePath("/repo/src/Current.java", false))
         overlay.pendingMarks = PendingMarks.of("/repo", listOf("src/Current.java", "src/Other.java", "src/Other.java"))
@@ -117,8 +120,46 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertEquals("purple bar first on the current file", purple, rgbAt(1, current))
         assertEquals("amber bar right after it", amber, rgbAt(bar + 1, current))
         assertEquals("amber bar at the edge of a pending-only file", amber, rgbAt(1, pendingOnly))
-        assertTrue("a pill follows the bar", (bar + 4 until bar + 20).any { rgbAt(it, pendingOnly) == amber })
+        val pillRange = (2 * bar + 4 until 2 * bar + 24)
+        assertTrue("a badge follows the bars", pillRange.any { rgbAt(it, pendingOnly) == amber })
+        val dark = ReviewChangeTrees.PENDING_TEXT.rgb and 0xFFFFFF
+        val pendingRow = tree.getRowBounds(tree.getRowForPath(TreePath(pendingOnly.path)))
+        assertTrue("the badge carries dark digits", pillRange.any { x -> (-3..3).any { dy -> (image.getRGB(x, pendingRow.y + pendingRow.height / 2 + dy) and 0xFFFFFF) == dark } })
         assertTrue("plain file untouched", rgbAt(1, plain) != amber && rgbAt(1, plain) != purple)
+    }
+
+    fun `test a collapsed folder gets a light bar and an expanded one nothing`() {
+        val folder = DefaultMutableTreeNode(LocalFilePath("/repo/src", true))
+        folder.add(DefaultMutableTreeNode(change("/repo/src/A.java")))
+        val tree = treeWith(folder)
+        val overlay = overlays(tree).single()
+        overlay.pendingMarks = PendingMarks.of("/repo", listOf("src/A.java"))
+        tree.collapseRow(0)
+
+        val folderRow = tree.getRowBounds(0)
+        val unmarked = render(treeWith(DefaultMutableTreeNode(LocalFilePath("/repo/other", true)))).getRGB(1, folderRow.y + folderRow.height / 2) and 0xFFFFFF
+        val collapsed = render(tree)
+        val lightAmber = collapsed.getRGB(1, folderRow.y + folderRow.height / 2) and 0xFFFFFF
+        assertTrue("collapsed folder is marked", lightAmber != unmarked)
+
+        tree.expandRow(0)
+        val expanded = render(tree)
+        assertEquals("expanded folder shows nothing", unmarked, expanded.getRGB(1, folderRow.y + folderRow.height / 2) and 0xFFFFFF)
+        val fileRow = tree.getRowBounds(1)
+        assertEquals("its file carries the mark", ReviewChangeTrees.PENDING.rgb and 0xFFFFFF, expanded.getRGB(1, fileRow.y + fileRow.height / 2) and 0xFFFFFF)
+    }
+
+    fun `test uninstall cancels the pending-comments subscription`() {
+        val tree = object : ChangesTree(project, false, false) {
+            override fun rebuildTree() {}
+        }
+        ReviewChangeTrees.install(tree, project.service<CurrentReviewFile>())
+        val overlay = overlays(tree).single()
+        val job = kotlinx.coroutines.Job()
+        overlay.marksJob?.cancel()
+        overlay.marksJob = job
+        ReviewChangeTrees.uninstall(tree)
+        assertTrue(job.isCancelled)
     }
 
     fun `test nothing is painted without a current file`() {

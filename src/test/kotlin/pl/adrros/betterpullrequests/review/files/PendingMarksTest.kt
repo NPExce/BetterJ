@@ -10,9 +10,10 @@ class PendingMarksTest : BasePlatformTestCase() {
         assertEquals(2, marks.countFor(LocalFilePath("/repo/src/A.java", false)))
         assertEquals(1, marks.countFor(LocalFilePath("/repo/src/sub/B.java", false)))
         assertEquals(0, marks.countFor(LocalFilePath("/repo/src/C.java", false)))
-        assertEquals(3, marks.countFor(LocalFilePath("/repo/src", true)))
-        assertEquals(4, marks.countFor(LocalFilePath("/repo", true)))
-        assertEquals(0, marks.countFor(LocalFilePath("/repo/docs", true)))
+        assertEquals(3, marks.sumUnder(LocalFilePath("/repo/src", true)))
+        assertEquals(4, marks.sumUnder(LocalFilePath("/repo", true)))
+        assertEquals(0, marks.sumUnder(LocalFilePath("/repo/docs", true)))
+        assertEquals(3, marks.sumFor(listOf(LocalFilePath("/repo/src/A.java", false), LocalFilePath("/repo/README.md", false), LocalFilePath("/repo/none", false))))
         assertFalse(marks.isEmpty)
         assertTrue(PendingMarks.NONE.isEmpty)
     }

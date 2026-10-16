@@ -11,12 +11,15 @@ import com.intellij.ui.paint.RectanglePainter2D
 import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.ui.JBUI
+import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
 import com.intellij.util.ui.JBFont
+import com.intellij.util.ui.launchOnShow
 import com.intellij.util.ui.tree.TreeUtil
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel
 import pl.adrros.betterpullrequests.review.DecorationOwner
-import pl.adrros.betterpullrequests.review.Retrying
 import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics
@@ -37,6 +40,8 @@ import kotlin.math.sin
  * tree: Swing paints children last, so it shows on top of selection, hover and file colours, and it never takes
  * a mouse event. The tree, its UI and its renderer stay untouched.
  */
+private val LOG = logger<ReviewChangeTrees>()
+
 object ReviewChangeTrees {
     const val INSTALLED = "BetterPullRequests.currentFileHighlight"
     private const val REVIEW_TREE_FACTORY = "com.intellij.collaboration.ui.codereview.changes.CodeReviewChangeListComponentFactory"
@@ -45,12 +50,16 @@ object ReviewChangeTrees {
     private const val TINT_ALPHA_MAX = 160
     private const val PULSE_PERIOD_MS = 1600
     private const val PULSE_TICK_MS = 40
+    private const val FOLDER_BAR_ALPHA = 128
 
     /** Saturated purple, overridable by themes; the tint is drawn with alpha, so text stays readable underneath. */
     val HIGHLIGHT: Color = JBColor.namedColor("BetterPullRequests.CurrentFile.background", JBColor(Color(0x7C, 0x3A, 0xED), Color(0xA7, 0x8B, 0xFA)))
 
     /** Amber for pending comments: distinct from the purple mark and from the platform's blue selection. */
     val PENDING: Color = JBColor.namedColor("BetterPullRequests.PendingComments.foreground", JBColor(Color(0xE0, 0x8A, 0x00), Color(0xFB, 0xBF, 0x24)))
+
+    /** Dark digits read on amber in both themes (white would fall below 3:1). */
+    val PENDING_TEXT: Color = JBColor.namedColor("BetterPullRequests.PendingComments.text", JBColor(Color(0x1F, 0x1F, 0x1F), Color(0x1F, 0x1F, 0x1F)))
 
     /** Finds the change list model above the tree; headless tests, whose data contexts are empty, replace it. */
     var changeListModelOf: (JTree) -> GHPRChangeListViewModel? = { tree ->
@@ -76,16 +85,25 @@ object ReviewChangeTrees {
         tree.addComponentListener(overlay.resizeListener)
         synchronized(installed) { installed.add(tree) }
         currentFile.track(tree)
-        if (tree is ChangesTree) Retrying.whenDisplayable(tree) { followPendingThreads(tree, overlay) }
+        if (tree is ChangesTree) overlay.marksJob = followPendingComments(tree, overlay)
         tree.repaint()
     }
 
-    private fun followPendingThreads(tree: ChangesTree, overlay: CurrentFileOverlay): Boolean {
-        if (overlay.marksJob != null || tree.getClientProperty(INSTALLED) !== overlay) return true
-        val changeList = changeListModelOf(tree) ?: return false
-        overlay.marksJob = tree.project.service<ReviewTreeMarksService>().follow(changeList, overlay)
-        return true
-    }
+    /**
+     * Runs only while the tree is on screen and dies with it, which is also when the change list model is
+     * published to the tree's data context. A tree for a single commit shows no PR-wide marks, like the platform.
+     */
+    private fun followPendingComments(tree: ChangesTree, overlay: CurrentFileOverlay): Job =
+        tree.launchOnShow("BetterPullRequests.pendingMarks") {
+            val changeList = changeListModelOf(tree) ?: return@launchOnShow
+            if (!changeList.isOnLatest) return@launchOnShow
+            val source = PendingThreadsSource.from(changeList) ?: return@launchOnShow
+            try {
+                source.pendingCommentPaths.collect { overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it) }
+            } catch (e: LinkageError) {
+                LOG.warn("Pending comment marks stopped: GitHub plugin API changed", e)
+            }
+        }
 
     fun uninstall(tree: JTree) {
         val overlay = tree.getClientProperty(INSTALLED) as? JComponent
@@ -174,36 +192,65 @@ object ReviewChangeTrees {
                 val nodePath = pathOf(TreeUtil.getLastUserObject(path)) ?: continue
                 val bounds = tree.getRowBounds(row) ?: continue
                 val isCurrent = current != null && !nodePath.isDirectory && nodePath == current
-                val pending = pendingMarks.countFor(nodePath)
+                val pending = pendingCountFor(path, nodePath)
                 if (isCurrent) {
                     paintMark(g, bounds, visible)
                     marked = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
                 }
-                if (pending > 0) paintPending(g, bounds, visible, pending, barOffset = if (isCurrent) JBUI.scale(BAR_WIDTH) else 0)
+                if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf = tree.model.isLeaf(path.lastPathComponent))
             }
             lastMark = marked
             if (marked != null && isShowing) pulse.start() else pulse.stop()
         }
 
-        /** An amber bar beside the purple one and a small pill with the number of pending comments. */
-        private fun paintPending(g: Graphics, row: Rectangle, visible: Rectangle, count: Int, barOffset: Int) {
+        /** Files count their own comments; a collapsed folder sums the files the tree shows beneath it, an expanded one shows nothing. */
+        private fun pendingCountFor(path: javax.swing.tree.TreePath, nodePath: FilePath): Int {
+            if (pendingMarks.isEmpty) return 0
+            val node = path.lastPathComponent
+            if (tree.model.isLeaf(node)) return pendingMarks.countFor(nodePath)
+            if (tree.isExpanded(path)) return 0
+            return when (node) {
+                is ChangesBrowserNode<*> -> pendingMarks.sumFor(node.traverseObjectsUnder().filter(RefComparisonChange::class.java).mapNotNull { pathOf(it) })
+                else -> pendingMarks.sumUnder(nodePath)
+            }
+        }
+
+        private var pillFont: java.awt.Font = JBFont.small().asBold()
+
+        override fun updateUI() {
+            super.updateUI()
+            pillFont = JBFont.small().asBold()
+        }
+
+        /**
+         * An amber bar beside the purple one (a lighter one on a collapsed folder) and, on file rows, a round badge
+         * with the number of pending comments. The badge sits at a fixed position in the indentation strip and is
+         * drawn only when it fits there, so it never covers a folder's expand handle or a file's icon.
+         */
+        private fun paintPending(g: Graphics, row: Rectangle, visible: Rectangle, count: Int, isCurrent: Boolean, leaf: Boolean) {
             val g2 = g.create() as Graphics2D
             try {
-                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
-                g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                com.intellij.util.ui.GraphicsUtil.setupAAPainting(g2)
+                com.intellij.ide.ui.UISettings.setupAntialiasing(g2)
                 val bar = JBUI.scale(BAR_WIDTH)
-                g2.color = PENDING
-                g2.fillRect(visible.x + barOffset, row.y, bar, row.height)
-                g2.font = JBFont.small().asBold()
-                val text = count.toString()
+                g2.color = if (leaf) PENDING else Color(PENDING.red, PENDING.green, PENDING.blue, FOLDER_BAR_ALPHA)
+                g2.fillRect(visible.x + if (isCurrent) bar else 0, row.y, bar, row.height)
+                if (!leaf) return
+
+                g2.font = pillFont
                 val metrics = g2.fontMetrics
-                val pillHeight = (row.height - JBUI.scale(6)).coerceAtLeast(metrics.height)
-                val pillWidth = metrics.stringWidth(text) + JBUI.scale(8)
-                val pillX = visible.x + barOffset + bar + JBUI.scale(3)
+                val text = count.toString()
+                val pillHeight = (row.height - JBUI.scale(6)).coerceIn(minOf(metrics.height, row.height - 2), row.height - 2)
+                val pillWidth = maxOf(metrics.stringWidth(text) + JBUI.scale(8), pillHeight)
+                val pillX = visible.x + 2 * bar + JBUI.scale(3)
+                if (pillX + pillWidth + JBUI.scale(2) > row.x) return // no room left of the file icon
                 val pillY = row.y + (row.height - pillHeight) / 2
+                g2.color = PENDING
                 RectanglePainter2D.FILL.paint(g2, pillX.toDouble(), pillY.toDouble(), pillWidth.toDouble(), pillHeight.toDouble(), pillHeight.toDouble())
-                g2.color = Color.WHITE
-                g2.drawString(text, pillX + JBUI.scale(4), pillY + (pillHeight - metrics.height) / 2 + metrics.ascent)
+                g2.color = PENDING_TEXT
+                val textX = pillX + (pillWidth - metrics.stringWidth(text)) / 2
+                val textY = pillY + (pillHeight + metrics.ascent - metrics.descent) / 2
+                g2.drawString(text, textX, textY)
             } finally {
                 g2.dispose()
             }
