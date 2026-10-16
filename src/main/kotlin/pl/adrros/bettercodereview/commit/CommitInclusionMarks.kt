@@ -9,7 +9,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.changes.Change
-import com.intellij.openapi.vcs.changes.ChangesUtil
 import com.intellij.openapi.vcs.changes.ui.ChangesListView
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -97,8 +96,9 @@ object CommitInclusionMarks {
         }
     }
 
+    /** The file a node stands for: a change by its path after the change (before it, when deleted); ChangesUtil moves between IDE versions, so the revisions are read directly. */
     fun pathOf(userObject: Any?): FilePath? = when (userObject) {
-        is Change -> ChangesUtil.getFilePath(userObject)
+        is Change -> userObject.afterRevision?.file ?: userObject.beforeRevision?.file
         is FilePath -> userObject
         else -> null
     }
