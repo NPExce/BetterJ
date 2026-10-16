@@ -37,8 +37,17 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
 7. **See which viewed files changed again** - GitHub drops the "viewed" tick of a file when a later commit touches
    it, and the bundled plugin then shows the same unread dot as for a file never looked at (the checkbox itself only
    appears under the mouse). The plugin paints a dash over that slot: dot = not viewed, tick = viewed, dash = viewed
-   before, changed since. Theme keys: `BetterCodeReview.ViewedDismissed.dash` (defaults to the theme's selected
-   checkbox colour) and `.dashOnCurrent` for the row of the open file.
+   before, changed since. Clicking cycles the states: a ticked file clicked once shows the dash ("read it again"),
+   clicked again is unticked, clicked again is ticked; a file GitHub dismissed follows the same path. GitHub only
+   stores ticked or not, so the dash after a click is the plugin's own flag, kept per project and pull request.
+   Theme keys: `BetterCodeReview.ViewedDismissed.dash` (defaults to the theme's selected checkbox colour),
+   `.dashOnCurrent` for the row of the open file and `.dashInBox` for the dash inside a checkbox.
+9. **Commit window: see which ticked files changed** - the checkboxes in the Commit tool window choose what goes
+   into the commit. A ticked file whose content changed since it was ticked (edited by you, or written on disk by a
+   tool such as a coding agent) shows a dash in its checkbox; so does a ticked file you click once, to mark it for
+   another look. A dashed file is still part of the commit. Clicking a dashed file unticks it as usual, and ticking
+   it again takes its current content as the new baseline. The baseline of files already ticked when the plugin
+   first sees the tree is their content at that moment. Keyboard toggling (Space) skips the dash step.
 8. **Double-click opens the file** - double-click or Enter on a file in the pull request's tree opens the file
    in the editor, which is what reading on the checked-out branch calls for; Alt+double-click and *Show Diff*
    in the context menu open the diff as before (the platform ignores Enter with modifiers, so there is no
@@ -84,6 +93,9 @@ Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbo
   the change list model (the data itself comes from public, cached flows, so no extra requests are made). When the
   fields are not where the plugin expects them, the marks stay off and the IDE log says so at INFO level
   ("Tree marks ..."). Both work only in the tree of the whole pull request, not in the tree of a single commit.
+- The click cycles intercept checkbox clicks at the toolkit level, before the trees' own click handlers, and the
+  pull request tree's viewed-state toggle (which ignores consumed events) is rewrapped to respect them. Both are
+  undone when the plugin unloads.
 - The *Review…* button is recognised by the shape of the details action row, which GitLab merge requests share;
   it is only added where a GitHub pull request is in the context. The submit flow reuses the GitHub plugin's
   review model through its pluggable popup handler, an internal API.

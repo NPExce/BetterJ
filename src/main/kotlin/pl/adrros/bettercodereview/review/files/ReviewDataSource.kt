@@ -45,6 +45,10 @@ class ReviewDataSource internal constructor(
     val dismissedPaths: Flow<List<String>>
         get() = viewedStates.map(::dismissedPaths).distinctUntilChanged()
 
+    /** GitHub's viewed state per repository-relative path, as the plugin last loaded it. */
+    val viewedStateByPath: Flow<Map<String, GHPullRequestFileViewedState>>
+        get() = viewedStates.distinctUntilChanged()
+
     companion object {
         fun pendingCommentPaths(threads: List<GHPullRequestReviewThread>): List<String> =
             threads.flatMap { thread -> thread.comments.filter { it.state == GHPullRequestReviewCommentState.PENDING }.map { thread.path } }.sorted()

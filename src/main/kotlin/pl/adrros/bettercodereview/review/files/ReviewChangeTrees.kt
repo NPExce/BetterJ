@@ -3,6 +3,7 @@ package pl.adrros.bettercodereview.review.files
 import com.intellij.collaboration.util.RefComparisonChange
 import com.intellij.ide.DataManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.ui.ExperimentalUI
@@ -23,6 +24,7 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.launchOnShow
 import com.intellij.util.ui.tree.TreeUtil
 import kotlinx.coroutines.Job
+import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
 import org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel
 import pl.adrros.bettercodereview.review.DecorationOwner
 import java.awt.Color
@@ -63,29 +65,19 @@ object ReviewChangeTrees {
     /** Amber for pending comments: distinct from the purple mark and from the platform's blue selection. */
     val PENDING: Color = JBColor.namedColor("BetterCodeReview.PendingComments.foreground", JBColor(Color(0xE0, 0x8A, 0x00), Color(0xFB, 0xBF, 0x24)))
 
-    /** The dash over a dismissed "viewed" slot: the theme's selected-checkbox colour, so it reads as part of the checkbox. */
-    val DISMISSED_DASH: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dash", JBColor.namedColor("Checkbox.Background.Selected", JBColor(Color(0x3D, 0x74, 0xF0), Color(0x5B, 0x8C, 0xFF))))
+    val DISMISSED_DASH: Color get() = RowSlots.DASH
 
-    // The unread-dot icon lives in experimental API; a build that renames it must not fail every paint.
-    private var unreadIconAvailable = true
+    fun isStateSlot(component: Component): Boolean = RowSlots.isStateSlot(component)
 
-    /** The unread dot the collaboration tools show for a file without a tick; its icon identifies the state slot. */
-    fun isStateSlot(component: Component): Boolean {
-        if (component is JCheckBox) return true
-        if (component !is javax.swing.JLabel || component.icon == null || !unreadIconAvailable) return false
-        return try {
-            component.icon === icons.CollaborationToolsIcons.Review.FileUnread
-        } catch (e: LinkageError) {
-            unreadIconAvailable = false
-            false
-        }
-    }
-
-    /** On the purple current-file tint the blue dash would fade to about 1.5:1; near-black (light) and white (dark) read there. */
-    val DISMISSED_DASH_ON_CURRENT: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dashOnCurrent", JBColor(Color(0x1F, 0x1F, 0x1F), Color.WHITE))
+    val DISMISSED_DASH_ON_CURRENT: Color get() = RowSlots.DASH_ON_CURRENT
 
     /** Dark digits read on amber in both themes (white would fall below 3:1). */
     val PENDING_TEXT: Color = JBColor.namedColor("BetterCodeReview.PendingComments.text", JBColor(Color(0x1F, 0x1F, 0x1F), Color(0x1F, 0x1F, 0x1F)))
+
+    /** The pull request behind the tree, as a key for the reviewer's own flags; headless tests replace it. */
+    var pullRequestKeyOf: (JTree) -> String? = { tree ->
+        DataManager.getInstance().getDataContext(tree).getData(org.jetbrains.plugins.github.pullrequest.action.GHPRActionKeys.PULL_REQUEST_ID)?.let { "pr-${it.number}" }
+    }
 
     /** Finds the change list model above the tree; headless tests, whose data contexts are empty, replace it. */
     var changeListModelOf: (JTree) -> GHPRChangeListViewModel? = { tree ->
@@ -115,6 +107,7 @@ object ReviewChangeTrees {
         if (tree is ChangesTree) {
             overlay.marksJob = followReviewData(tree, overlay)
             overlay.handlers = TreeOpensFile.install(tree)
+            ViewedStateCycle.install(tree, overlay)
         }
         tree.repaint()
     }
@@ -150,6 +143,8 @@ object ReviewChangeTrees {
             return
         }
         log("Tree marks following pull request data under ${source.repositoryRootPath}")
+        overlay.repositoryRootPath = source.repositoryRootPath
+        overlay.pullRequestKey = pullRequestKeyOf(tree) ?: source.repositoryRootPath
         // Each collector fails on its own: a GitHub plugin change breaking one mark must not take the other down.
         launch {
             collectMarks("pending comments") {
@@ -161,9 +156,9 @@ object ReviewChangeTrees {
         }
         launch {
             collectMarks("viewed-then-changed files") {
-                source.dismissedPaths.collect {
-                    if (LOG.isDebugEnabled) LOG.debug("Viewed-then-changed files: ${it.size}")
-                    overlay.dismissed = PendingMarks.of(source.repositoryRootPath, it)
+                source.viewedStateByPath.collect {
+                    if (LOG.isDebugEnabled) LOG.debug("Viewed states loaded for ${it.size} file(s), ${ReviewDataSource.dismissedPaths(it).size} viewed-then-changed")
+                    overlay.viewedStates = it
                 }
             }
         }
@@ -188,6 +183,8 @@ object ReviewChangeTrees {
                 it.stopPulsing()
                 it.marksJob?.cancel()
                 it.handlers?.let { handlers -> (tree as? ChangesTree)?.let { changesTree -> TreeOpensFile.uninstall(changesTree, handlers) } }
+                (tree as? ChangesTree)?.let(ViewedStateCycle::uninstall)
+                it.detachFlags()
                 tree.removeComponentListener(it.resizeListener)
                 it.currentFile.untrack(tree)
             }
@@ -202,21 +199,7 @@ object ReviewChangeTrees {
         synchronized(installed) { installed.toList() }.forEach { tree -> runCatching { uninstall(tree) } }
     }
 
-    /** Where a row's renderer is painted: the platform UI stretches it to the visible width, which puts the state slot at the right edge. */
-    fun paintedRowBounds(tree: JTree, path: TreePath): Rectangle? = actualBounds(tree, path) ?: tree.getPathBounds(path)
-
-    // CustomBoundsTreeUI is experimental API; a build without it must not fail every paint.
-    private var customBoundsAvailable = true
-
-    private fun actualBounds(tree: JTree, path: TreePath): Rectangle? {
-        if (!customBoundsAvailable) return null
-        return try {
-            (tree.ui as? com.intellij.ui.tree.ui.CustomBoundsTreeUI)?.getActualPathBounds(tree, path)
-        } catch (e: LinkageError) {
-            customBoundsAvailable = false
-            null
-        }
-    }
+    fun paintedRowBounds(tree: JTree, path: TreePath): Rectangle? = RowSlots.paintedRowBounds(tree, path)
 
     /** The file a tree node stands for: changed files by their path after the change (before it, when deleted), folders by their path. */
     fun pathOf(userObject: Any?): FilePath? = when (userObject) {
@@ -241,12 +224,54 @@ object ReviewChangeTrees {
         var handlers: TreeOpensFile.Handlers? = null
         val loggedOutcomes = HashSet<String>()
 
-        /** Files whose "viewed" tick GitHub dismissed after new changes: their checkbox gets a dash. */
+        /** Files whose "viewed" tick GitHub dismissed after new changes: their slot gets a dash. */
         var dismissed: PendingMarks = PendingMarks.NONE
             set(value) {
                 field = value
                 repaint()
             }
+
+        var repositoryRootPath: String? = null
+        var pullRequestKey: String? = null
+
+        private val flagsListener: () -> Unit = { repaint() }
+        private var flagsAttached = false
+        private val flags: ReviewFlags by lazy {
+            flagsAttached = true
+            ((tree as? ChangesTree)?.project ?: currentFile.project).service<ReviewFlags>().also { it.addListener(flagsListener) }
+        }
+
+        /** GitHub's viewed state per repository-relative path; a transition into "viewed" takes the reviewer's flag off. */
+        var viewedStates: Map<String, GHPullRequestFileViewedState> = emptyMap()
+            set(value) {
+                val before = field
+                field = value
+                if (pullRequestKey != null) {
+                    for ((path, state) in value) {
+                        if (state == GHPullRequestFileViewedState.VIEWED && before[path] != state && isFlagged(path)) setFlag(path, false)
+                    }
+                }
+                dismissed = repositoryRootPath?.let { PendingMarks.of(it, ReviewDataSource.dismissedPaths(value)) } ?: PendingMarks.NONE
+            }
+
+        fun relativePath(path: FilePath): String? = repositoryRootPath?.let { FileUtil.getRelativePath(it, path.path, '/') }
+
+        fun viewedStateOf(relativePath: String): GHPullRequestFileViewedState? = viewedStates[relativePath]
+
+        fun isFlagged(relativePath: String): Boolean {
+            val key = pullRequestKey ?: return false
+            return flags.isFlagged(key, relativePath)
+        }
+
+        fun setFlag(relativePath: String, on: Boolean) {
+            val key = pullRequestKey ?: return
+            if (on) flags.set(key, relativePath) else flags.clear(key, relativePath)
+            repaint()
+        }
+
+        fun detachFlags() {
+            if (flagsAttached) flags.removeListener(flagsListener)
+        }
 
         private var phase = 0
         private var lastMark: Rectangle? = null
@@ -304,7 +329,7 @@ object ReviewChangeTrees {
                 if (isCurrent) paintMark(g, bounds, visible)
                 val leaf = tree.model.isLeaf(path.lastPathComponent)
                 if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf)
-                if (leaf && dismissed.countFor(nodePath) > 0) paintDismissedDash(g, path, row, isCurrent)
+                if (leaf && (dismissed.countFor(nodePath) > 0 || relativePath(nodePath)?.let(::isFlagged) == true)) paintDismissedDash(g, path, row, isCurrent)
             }
             lastMark = marked
             if (marked != null && isShowing) pulse.start() else pulse.stop()
@@ -325,55 +350,11 @@ object ReviewChangeTrees {
         /**
          * GitHub drops the "viewed" tick of a file changed after it was viewed, and the bundled plugin then shows
          * the same unread dot as for a file never looked at (the checkbox only appears under the mouse). The dash
-         * over that slot turns it into the "viewed before, changed since" state. The slot is located per paint:
-         * only visible dismissed rows pay for it, and its place shifts with the comment badge beside it.
+         * over that slot means "viewed before, read it again": GitHub's dismissal or the reviewer's own flag.
          */
         private fun paintDismissedDash(g: Graphics, path: TreePath, row: Int, isCurrent: Boolean) {
-            val bounds = paintedRowBounds(tree, path) ?: return
-            val slot = stateSlot(path, row, bounds) ?: return
-            val size = minOf(slot.width, slot.height)
-            val dashWidth = (size * 0.6).toInt().coerceAtLeast(JBUI.scale(8))
-            val dashHeight = JBUI.scale(2)
-            val x = bounds.x + slot.x + (slot.width - dashWidth) / 2
-            val y = bounds.y + slot.y + (slot.height - dashHeight) / 2
-            val g2 = g.create() as Graphics2D
-            try {
-                if (isCurrent) {
-                    // No halo here: it would punch a hole into the tint. The dash contrasts with the tinted row instead.
-                    g2.color = DISMISSED_DASH_ON_CURRENT
-                } else {
-                    // A halo in the row's background separates the dash from the dot underneath; the hovered row shows
-                    // a checkbox instead of the dot and needs none.
-                    val hovered = com.intellij.ui.hover.TreeHoverListener.getHoveredRow(tree) == row
-                    if (!hovered) {
-                        g2.color = if (tree.isRowSelected(row)) RenderingUtil.getSelectionBackground(tree) else RenderingUtil.getBackground(tree)
-                        g2.fillRect(x - JBUI.scale(1), y - JBUI.scale(2), dashWidth + 2 * JBUI.scale(1), dashHeight + 2 * JBUI.scale(2))
-                    }
-                    g2.color = DISMISSED_DASH
-                }
-                g2.fillRect(x, y, dashWidth, dashHeight)
-            } finally {
-                g2.dispose()
-            }
-        }
-
-        private var slotMissingLogged = false
-
-        /** The viewed checkbox when the renderer shows one, else the unread-dot label; null when the renderer has neither. */
-        private fun stateSlot(path: TreePath, row: Int, bounds: Rectangle): Rectangle? {
-            val node = path.lastPathComponent
-            val renderer = tree.cellRenderer.getTreeCellRendererComponent(tree, node, tree.isRowSelected(row), false, true, row, false) as? JComponent ?: return null
-            renderer.setBounds(0, 0, bounds.width, bounds.height)
-            UIUtil.layoutRecursively(renderer)
-            val slot = UIUtil.uiTraverser(renderer).filter(Component::class.java).firstOrNull { isStateSlot(it) }
-            if (slot == null || slot.width == 0) {
-                if (!slotMissingLogged) {
-                    slotMissingLogged = true
-                    LOG.info("Viewed-then-changed mark skipped: the row renderer has no viewed checkbox or unread dot (renderer ${renderer.javaClass.name})")
-                }
-                return null
-            }
-            return SwingUtilities.convertRectangle(slot.parent, slot.bounds, renderer)
+            val slot = RowSlots.stateSlot(tree, path, row) ?: return
+            RowSlots.paintDash(g, tree, row, slot, isCurrent)
         }
 
         private var pillFont: java.awt.Font = JBFont.small().asBold()

@@ -18,7 +18,7 @@ import javax.swing.JTree
  * Compared as [FilePath], which knows about case-insensitive file systems.
  */
 @Service(Service.Level.PROJECT)
-class CurrentReviewFile(private val project: Project) {
+class CurrentReviewFile(val project: Project) {
     @Volatile
     var path: FilePath? = null
         private set

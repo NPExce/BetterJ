@@ -17,8 +17,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import pl.adrros.bettercodereview.copy.CommentCopyButtons
 import pl.adrros.bettercodereview.copy.CommentPanes
+import pl.adrros.bettercodereview.commit.CommitInclusionMarks
+import pl.adrros.bettercodereview.review.files.CheckboxClicks
 import pl.adrros.bettercodereview.review.files.ReviewChangeTrees
 import pl.adrros.bettercodereview.review.submit.DetailsReviewButton
+import com.intellij.openapi.vcs.changes.ui.ChangesListView
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import javax.swing.JPanel
 import java.awt.AWTEvent
@@ -37,7 +40,7 @@ private const val POPUP_GROUP_ID = "BetterCodeReview.CommentPopup"
 /**
  * Owns everything the plugin adds to the GitHub review UI without touching that UI's code: the context menu on
  * comments, the copy button in comment actions, the buttons under comment fields, the Review button in the
- * details and the current-file mark in the change tree.
+ * details, the marks in the change tree and the marks in the Commit tool window's tree.
  * Being an application service, it is disposed when the plugin unloads, and it then takes its additions back out
  * so a newer plugin version installed without restart starts from a clean UI.
  */
@@ -64,6 +67,7 @@ class ReviewUiDecorationService : Disposable {
             event is ContainerEvent && event.id == ContainerEvent.COMPONENT_ADDED -> decorate(event.child)
             event is MouseEvent && event.isPopupTrigger ->
                 CommentPanes.asCommentPane(event.component)?.let { showPopup(it, event) }
+            event is MouseEvent -> CheckboxClicks.intercept(event)
         }
     }
 
@@ -72,6 +76,7 @@ class ReviewUiDecorationService : Disposable {
         guarded { CommentPanes.asCommentPane(component)?.let(CommentCopyButtons::watch) }
         guarded { (component as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch) }
         guarded { (component as? ChangesTree)?.takeIf(ReviewChangeTrees::isReviewChangesTree)?.let(ReviewChangeTrees::watch) }
+        guarded { (component as? ChangesListView)?.takeIf(CommitInclusionMarks::isCommitTree)?.let(CommitInclusionMarks::watch) }
     }
 
     private fun showPopup(pane: JEditorPane, event: MouseEvent) {
@@ -102,6 +107,7 @@ class ReviewUiDecorationService : Disposable {
         listener?.let { toolkit.removeAWTEventListener(it) }
         listener = null
         guarded { ReviewChangeTrees.uninstallAll() }
+        guarded { CommitInclusionMarks.uninstallAll() }
         guarded {
             for (window in Window.getWindows()) {
                 for (component in UIUtil.uiTraverser(window).filter(JComponent::class.java)) {
@@ -122,7 +128,7 @@ class ReviewUiDecorationService : Disposable {
 
     companion object {
         /** Markers whose value is the injected component. */
-        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED, ReviewChangeTrees.INSTALLED)
+        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED, ReviewChangeTrees.INSTALLED, CommitInclusionMarks.INSTALLED)
         val ALL_FLAGS: List<String> = INJECTED_FLAGS + CommentCopyButtons.WATCHED
 
         /** Listener code runs inside AWT event dispatch; an exception there would be reported as an IDE error. */

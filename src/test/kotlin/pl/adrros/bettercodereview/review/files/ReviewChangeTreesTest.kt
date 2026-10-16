@@ -217,6 +217,37 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertTrue("nothing painted outside the clip", (image.getRGB(1, marked!!.y + marked.height / 2) and 0xFFFFFF) != bar)
     }
 
+    fun `test a flagged file shows the dash and a transition into viewed clears the flag`() {
+        val flaggedNode = DefaultMutableTreeNode(change("/repo/src/Flagged.java"))
+        val folder = DefaultMutableTreeNode(LocalFilePath("/repo/src", true)).apply { add(flaggedNode) }
+        val tree = treeWith(folder)
+        tree.cellRenderer = nativeLikeRenderer(viewed = emptySet())
+        tree.expandRow(0)
+        val overlay = overlays(tree).single()
+        overlay.repositoryRootPath = "/repo"
+        overlay.pullRequestKey = "pr-test"
+        val flags = project.service<ReviewFlags>()
+        try {
+            overlay.viewedStates = mapOf("src/Flagged.java" to org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState.UNVIEWED)
+            assertEquals("src/Flagged.java", overlay.relativePath(LocalFilePath("/repo/src/Flagged.java", false)))
+            overlay.setFlag("src/Flagged.java", true)
+            assertTrue(flags.isFlagged("pr-test", "src/Flagged.java"))
+            val dash = ReviewChangeTrees.DISMISSED_DASH.rgb and 0xFFFFFF
+            val image = render(tree)
+            val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(flaggedNode.path))!!
+            assertTrue("flagged file carries the dash", (row.x until minOf(row.x + row.width, image.width)).any { x -> (row.y until row.y + row.height).any { y -> (image.getRGB(x, y) and 0xFFFFFF) == dash } })
+
+            overlay.viewedStates = mapOf("src/Flagged.java" to org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState.VIEWED)
+            assertFalse("ticked elsewhere: the flag is gone", flags.isFlagged("pr-test", "src/Flagged.java"))
+            overlay.setFlag("src/Flagged.java", true)
+            overlay.viewedStates = mapOf("src/Flagged.java" to org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState.VIEWED)
+            assertTrue("no transition, the flag stays", flags.isFlagged("pr-test", "src/Flagged.java"))
+        } finally {
+            flags.clear("pr-test", "src/Flagged.java")
+            com.intellij.ide.util.PropertiesComponent.getInstance(project).unsetValue(ReviewFlags.KEY)
+        }
+    }
+
     fun `test the slot is the viewed checkbox or the unread dot and nothing else`() {
         assertTrue(ReviewChangeTrees.isStateSlot(javax.swing.JCheckBox()))
         assertTrue(ReviewChangeTrees.isStateSlot(javax.swing.JLabel(icons.CollaborationToolsIcons.Review.FileUnread)))
