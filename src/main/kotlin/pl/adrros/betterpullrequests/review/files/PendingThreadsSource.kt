@@ -1,6 +1,7 @@
 package pl.adrros.betterpullrequests.review.files
 
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -29,11 +30,17 @@ class PendingThreadsSource internal constructor(private val threads: Flow<List<G
         fun pendingCommentPaths(threads: List<GHPullRequestReviewThread>): List<String> =
             threads.flatMap { thread -> thread.comments.filter { it.state == GHPullRequestReviewCommentState.PENDING }.map { thread.path } }.sorted()
 
+        /** False only when the change list is pinned to one commit; older and newer IDEs without the property count as latest. */
+        fun isOnLatest(changeList: GHPRChangeListViewModel): Boolean =
+            runCatching { changeList.javaClass.getMethod("isOnLatest").invoke(changeList) as? Boolean }.getOrNull() ?: true
+
         fun from(changeList: GHPRChangeListViewModel): PendingThreadsSource? =
             try {
                 val dataProvider = privateField(changeList, "dataProvider") as GHPRDataProvider
                 val dataContext = privateField(changeList, "dataContext") as GHPRDataContext
-                val root = dataContext.repositoryDataService.repositoryMapping.gitRepository.root
+                // The git repository type pulls in a platform package that moves between IDE versions; ask for the root by name.
+                val repository: Any = dataContext.repositoryDataService.repositoryMapping.gitRepository
+                val root = repository.javaClass.getMethod("getRoot").invoke(repository) as VirtualFile
                 val threads = dataProvider.reviewData.threadsComputationFlow
                     .filter { it.isSuccess }
                     .map { it.result!!.getOrThrow() }

@@ -96,7 +96,7 @@ object ReviewChangeTrees {
     private fun followPendingComments(tree: ChangesTree, overlay: CurrentFileOverlay): Job =
         tree.launchOnShow("BetterPullRequests.pendingMarks") {
             val changeList = changeListModelOf(tree) ?: return@launchOnShow
-            if (!changeList.isOnLatest) return@launchOnShow
+            if (!PendingThreadsSource.isOnLatest(changeList)) return@launchOnShow
             val source = PendingThreadsSource.from(changeList) ?: return@launchOnShow
             try {
                 source.pendingCommentPaths.collect { overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it) }
