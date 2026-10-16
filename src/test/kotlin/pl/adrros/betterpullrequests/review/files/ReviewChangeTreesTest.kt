@@ -83,6 +83,19 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertTrue("other row has no bar", (image.getRGB(1, otherRow.y + otherRow.height / 2) and 0xFFFFFF) != bar)
     }
 
+    fun `test the mark pulses only while a marked row is painted`() {
+        val node = DefaultMutableTreeNode(change("/repo/src/Current.java"))
+        val tree = treeWith(node)
+        val overlay = overlays(tree).single()
+        // Not showing (no window), so no animation even with a match; painting without a match stops it.
+        project.service<CurrentReviewFile>().update(LocalFilePath("/repo/src/Current.java", false))
+        render(tree)
+        assertFalse(overlay.isPulsing)
+        project.service<CurrentReviewFile>().update(null as com.intellij.openapi.vcs.FilePath?)
+        render(tree)
+        assertFalse(overlay.isPulsing)
+    }
+
     fun `test nothing is painted without a current file`() {
         val node = DefaultMutableTreeNode(change("/repo/src/Current.java"))
         val tree = treeWith(node)

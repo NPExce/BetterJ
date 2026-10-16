@@ -22,8 +22,9 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    state, also after someone else already approved, where the bundled plugin hides its own button. Authors can
    only comment, as on github.com.
 
-5. **See where you are in the change tree** - the file open in the selected editor tab gets a purple tint and a
-   bar at the left edge in the pull request's file tree, on top of selection, hover and file colours. It follows
+5. **See where you are in the change tree** - the file open in the selected editor tab gets a gently pulsing
+   purple tint and a bar at the left edge in the pull request's file tree, on top of selection, hover and file
+   colours. It follows
    the editor file matched by path, so it works when the real file is open (review on the checked-out branch);
    a diff tab does not match. Renamed files match their new path, deleted files never do.
 

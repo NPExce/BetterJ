@@ -21,6 +21,10 @@ import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.swing.JComponent
 import javax.swing.JTree
+import javax.swing.Timer
+import kotlin.math.PI
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * Marks the file open in the editor inside the pull request's change tree, so the reader always knows which
@@ -31,11 +35,14 @@ import javax.swing.JTree
 object ReviewChangeTrees {
     const val INSTALLED = "BetterPullRequests.currentFileHighlight"
     private const val REVIEW_TREE_FACTORY = "com.intellij.collaboration.ui.codereview.changes.CodeReviewChangeListComponentFactory"
-    private const val BAR_WIDTH = 3
-    private const val TINT_ALPHA = 60
+    private const val BAR_WIDTH = 4
+    private const val TINT_ALPHA_MIN = 90
+    private const val TINT_ALPHA_MAX = 160
+    private const val PULSE_PERIOD_MS = 1600
+    private const val PULSE_TICK_MS = 40
 
-    /** Purple, overridable by themes; the tint is drawn with alpha, so it reads over selection and file colours too. */
-    val HIGHLIGHT: Color = JBColor.namedColor("BetterPullRequests.CurrentFile.background", JBColor(Color(0x8B, 0x5C, 0xF6), Color(0xA7, 0x8B, 0xFA)))
+    /** Saturated purple, overridable by themes; the tint is drawn with alpha, so text stays readable underneath. */
+    val HIGHLIGHT: Color = JBColor.namedColor("BetterPullRequests.CurrentFile.background", JBColor(Color(0x7C, 0x3A, 0xED), Color(0xA7, 0x8B, 0xFA)))
 
     private val installed = ContainerUtil.createWeakSet<JTree>()
 
@@ -63,7 +70,11 @@ object ReviewChangeTrees {
         val overlay = tree.getClientProperty(INSTALLED) as? JComponent
         tree.putClientProperty(INSTALLED, null)
         if (overlay != null) {
-            (overlay as? CurrentFileOverlay)?.let { tree.removeComponentListener(it.resizeListener); it.currentFile.untrack(tree) }
+            (overlay as? CurrentFileOverlay)?.let {
+                it.stopPulsing()
+                tree.removeComponentListener(it.resizeListener)
+                it.currentFile.untrack(tree)
+            }
             tree.remove(overlay)
         }
         synchronized(installed) { installed.remove(tree) }
@@ -87,12 +98,34 @@ object ReviewChangeTrees {
             override fun componentResized(e: ComponentEvent) = fitTree()
         }
 
+        private var phase = 0
+        private var lastMark: Rectangle? = null
+        private val pulse = Timer(PULSE_TICK_MS) {
+            phase = (phase + PULSE_TICK_MS) % PULSE_PERIOD_MS
+            lastMark?.let { repaint(it) } ?: repaint()
+        }
+
+        val isPulsing: Boolean get() = pulse.isRunning
+
         init {
             isOpaque = false
             isFocusable = false
             DecorationOwner.mark(this)
             fitTree()
         }
+
+        /** Alpha of the tint at this moment: a sine wave between the two limits. */
+        private fun tintAlpha(): Int {
+            val wave = (sin(2 * PI * phase / PULSE_PERIOD_MS) + 1) / 2
+            return (TINT_ALPHA_MIN + wave * (TINT_ALPHA_MAX - TINT_ALPHA_MIN)).roundToInt()
+        }
+
+        override fun removeNotify() {
+            pulse.stop()
+            super.removeNotify()
+        }
+
+        fun stopPulsing() = pulse.stop()
 
         private fun fitTree() {
             bounds = Rectangle(0, 0, tree.width, tree.height)
@@ -102,17 +135,27 @@ object ReviewChangeTrees {
         override fun contains(x: Int, y: Int): Boolean = false
 
         override fun paintComponent(g: Graphics) {
-            val current = currentFile.path ?: return
+            val current = currentFile.path
             val visible = tree.visibleRect
-            val clip = g.clipBounds ?: visible
-            val first = tree.getClosestRowForLocation(0, clip.y).coerceAtLeast(0)
-            val last = tree.getClosestRowForLocation(0, clip.y + clip.height - 1).coerceAtLeast(first)
-            for (row in first..last) {
-                val path = tree.getPathForRow(row) ?: continue
-                if (pathOf(TreeUtil.getLastUserObject(path)) != current) continue
-                val bounds = tree.getRowBounds(row) ?: continue
-                paintMark(g, bounds, visible)
+            var marked: Rectangle? = null
+            if (current != null) {
+                for (row in visibleRows(visible)) {
+                    val path = tree.getPathForRow(row) ?: continue
+                    if (pathOf(TreeUtil.getLastUserObject(path)) != current) continue
+                    val bounds = tree.getRowBounds(row) ?: continue
+                    paintMark(g, bounds, visible)
+                    marked = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
+                }
             }
+            lastMark = marked
+            if (marked != null && isShowing) pulse.start() else pulse.stop()
+        }
+
+        private fun visibleRows(visible: Rectangle): IntRange {
+            if (tree.rowCount == 0 || visible.isEmpty) return IntRange.EMPTY
+            val first = tree.getClosestRowForLocation(0, visible.y).coerceAtLeast(0)
+            val last = tree.getClosestRowForLocation(0, visible.y + visible.height - 1).coerceAtLeast(first)
+            return first..last
         }
 
         private fun paintMark(g: Graphics, row: Rectangle, visible: Rectangle) {
@@ -121,7 +164,7 @@ object ReviewChangeTrees {
                 val newUi = ExperimentalUI.isNewUI()
                 val inset = if (newUi) JBUI.scale(DefaultTreeUI.HORIZONTAL_SELECTION_OFFSET) else 0
                 val arc = if (newUi) JBUI.CurrentTheme.Tree.ARC.get().toDouble() else 0.0
-                g2.color = Color(HIGHLIGHT.red, HIGHLIGHT.green, HIGHLIGHT.blue, TINT_ALPHA)
+                g2.color = Color(HIGHLIGHT.red, HIGHLIGHT.green, HIGHLIGHT.blue, tintAlpha())
                 RectanglePainter2D.FILL.paint(
                     g2, (visible.x + inset).toDouble(), row.y.toDouble(), (visible.width - 2 * inset).toDouble(), row.height.toDouble(), arc,
                 )
