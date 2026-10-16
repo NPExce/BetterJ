@@ -1,4 +1,4 @@
-# BetterPullRequests
+# BetterCodeReview
 
 Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA (and other JetBrains IDEs):
 
@@ -32,8 +32,8 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    appears when the indentation leaves room for it). A collapsed folder gets a lighter bar; expanded folders show
    nothing, their files do. The marks disappear once the review is submitted. Unresolved discussions are already
    shown by the bundled plugin as a comment icon with a number next to the file; a pending thread counts there too.
-   Theme keys: `BetterPullRequests.CurrentFile.background`, `BetterPullRequests.PendingComments.foreground`,
-   `BetterPullRequests.PendingComments.text`.
+   Theme keys: `BetterCodeReview.CurrentFile.background`, `BetterCodeReview.PendingComments.foreground`,
+   `BetterCodeReview.PendingComments.text`.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
 JAVA_HOME=<JDK 21> ./gradlew buildPlugin
 ```
 
-The zip lands in `build/distributions/` (`BetterPullRequests-<version>.zip`). `gradle.properties` points `platformLocalPath` at a local IDE so the
+The zip lands in `build/distributions/` (`BetterCodeReview-<version>.zip`). `gradle.properties` points `platformLocalPath` at a local IDE so the
 build needs no 1 GB download; remove the property to build against a downloaded IntelliJ IDEA Community 2026.1.
 
 Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbox).

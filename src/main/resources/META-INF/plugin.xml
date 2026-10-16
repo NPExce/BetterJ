@@ -1,6 +1,6 @@
 <idea-plugin>
-    <id>pl.adrros.betterpullrequests</id>
-    <name>BetterPullRequests</name>
+    <id>pl.adrros.bettercodereview</id>
+    <name>BetterCodeReview</name>
     <vendor>adrros</vendor>
     <description><![CDATA[
         Better pull request reviews inside the IDE - small additions to the bundled GitHub Pull Requests UI:
@@ -20,67 +20,67 @@
     <depends>org.jetbrains.plugins.github</depends>
     <depends>Git4Idea</depends>
 
-    <resource-bundle>messages.BetterPullRequestsBundle</resource-bundle>
+    <resource-bundle>messages.BetterCodeReviewBundle</resource-bundle>
 
     <projectListeners>
-        <listener class="pl.adrros.betterpullrequests.review.files.CurrentReviewFile$EditorListener"
+        <listener class="pl.adrros.bettercodereview.review.files.CurrentReviewFile$EditorListener"
                   topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
 
     <extensions defaultExtensionNs="com.intellij">
-        <notificationGroup id="BetterPullRequests" displayType="BALLOON"/>
+        <notificationGroup id="BetterCodeReview" displayType="BALLOON"/>
 
-        <postStartupActivity implementation="pl.adrros.betterpullrequests.review.ReviewUiDecorationInstaller"/>
+        <postStartupActivity implementation="pl.adrros.bettercodereview.review.ReviewUiDecorationInstaller"/>
 
-        <editorFactoryListener implementation="pl.adrros.betterpullrequests.review.ReviewCommentEditorListener"/>
+        <editorFactoryListener implementation="pl.adrros.bettercodereview.review.ReviewCommentEditorListener"/>
 
-        <actionPromoter implementation="pl.adrros.betterpullrequests.review.ReviewActionPromoter"/>
+        <actionPromoter implementation="pl.adrros.bettercodereview.review.ReviewActionPromoter"/>
 
-        <customPasteProvider implementation="pl.adrros.betterpullrequests.paste.ReviewImagePasteProvider" order="first"/>
+        <customPasteProvider implementation="pl.adrros.bettercodereview.paste.ReviewImagePasteProvider" order="first"/>
 
         <completion.contributor language="any"
-                                implementationClass="pl.adrros.betterpullrequests.emoji.EmojiCompletionContributor"/>
+                                implementationClass="pl.adrros.bettercodereview.emoji.EmojiCompletionContributor"/>
 
-        <projectService serviceInterface="pl.adrros.betterpullrequests.upload.AttachmentUploadService"
-                        serviceImplementation="pl.adrros.betterpullrequests.upload.GitHubAttachmentUploadService"/>
+        <projectService serviceInterface="pl.adrros.bettercodereview.upload.AttachmentUploadService"
+                        serviceImplementation="pl.adrros.bettercodereview.upload.GitHubAttachmentUploadService"/>
 
-        <applicationService serviceInterface="pl.adrros.betterpullrequests.review.ReviewTargets"
-                            serviceImplementation="pl.adrros.betterpullrequests.review.ReviewTargets$Default"/>
+        <applicationService serviceInterface="pl.adrros.bettercodereview.review.ReviewTargets"
+                            serviceImplementation="pl.adrros.bettercodereview.review.ReviewTargets$Default"/>
     </extensions>
 
     <actions>
-        <action id="BetterPullRequests.CopyComment"
-                class="pl.adrros.betterpullrequests.copy.CopyCommentAction"
+        <action id="BetterCodeReview.CopyComment"
+                class="pl.adrros.bettercodereview.copy.CopyCommentAction"
                 use-shortcut-of="$Copy">
             <add-to-group group-id="EditMenu" anchor="last"/>
         </action>
 
-        <action id="BetterPullRequests.CopyWholeComment"
-                class="pl.adrros.betterpullrequests.copy.CopyWholeCommentAction"/>
+        <action id="BetterCodeReview.CopyWholeComment"
+                class="pl.adrros.bettercodereview.copy.CopyWholeCommentAction"/>
 
-        <action id="BetterPullRequests.CopySelectedCommentText"
-                class="pl.adrros.betterpullrequests.copy.CopySelectedCommentTextAction"/>
+        <action id="BetterCodeReview.CopySelectedCommentText"
+                class="pl.adrros.bettercodereview.copy.CopySelectedCommentTextAction"/>
 
-        <group id="BetterPullRequests.CommentPopup">
-            <reference ref="BetterPullRequests.CopyWholeComment"/>
-            <reference ref="BetterPullRequests.CopySelectedCommentText"/>
+        <group id="BetterCodeReview.CommentPopup">
+            <reference ref="BetterCodeReview.CopyWholeComment"/>
+            <reference ref="BetterCodeReview.CopySelectedCommentText"/>
         </group>
 
-        <action id="BetterPullRequests.PasteImage"
-                class="pl.adrros.betterpullrequests.paste.PasteReviewImageAction">
+        <action id="BetterCodeReview.PasteImage"
+                class="pl.adrros.bettercodereview.paste.PasteReviewImageAction">
             <add-to-group group-id="EditMenu" anchor="last"/>
         </action>
 
-        <action id="BetterPullRequests.SubmitReview"
-                class="pl.adrros.betterpullrequests.review.submit.SubmitReviewAction"
+        <action id="BetterCodeReview.SubmitReview"
+                class="pl.adrros.bettercodereview.review.submit.SubmitReviewAction"
                 icon="AllIcons.Actions.Checked">
             <add-to-group group-id="Github.PullRequest.Details.Popup" anchor="first"/>
             <add-to-group group-id="Github.PullRequest.Changes.Popup" anchor="first"/>
             <add-to-group group-id="Github.PullRequest.Timeline.Popup" anchor="first"/>
         </action>
 
-        <action id="BetterPullRequests.InsertEmoji"
-                class="pl.adrros.betterpullrequests.emoji.InsertEmojiAction">
+        <action id="BetterCodeReview.InsertEmoji"
+                class="pl.adrros.bettercodereview.emoji.InsertEmojiAction">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift SEMICOLON"/>
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <add-to-group group-id="EditMenu" anchor="last"/>
