@@ -12,7 +12,7 @@
                 context menus): approve, request changes or comment, also after someone else already approved.
                 Authors can only comment.</li>
             <li>The changed file open in the editor is tinted purple in the pull request's file tree, so you can see where
-                you are and mark it as viewed.</li>
+                you are and mark it as viewed; files with your not-yet-submitted review comments get an amber bar and a count.</li>
         </ul>
     ]]></description>
 

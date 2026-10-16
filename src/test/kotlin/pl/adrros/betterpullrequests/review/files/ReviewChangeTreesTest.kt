@@ -96,6 +96,31 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertFalse(overlay.isPulsing)
     }
 
+    fun `test files with pending comments get an amber bar and a count, beside the purple bar when current`() {
+        val current = DefaultMutableTreeNode(change("/repo/src/Current.java"))
+        val pendingOnly = DefaultMutableTreeNode(change("/repo/src/Other.java"))
+        val plain = DefaultMutableTreeNode(change("/repo/src/Plain.java"))
+        val tree = treeWith(current, pendingOnly, plain)
+        val overlay = overlays(tree).single()
+        project.service<CurrentReviewFile>().update(LocalFilePath("/repo/src/Current.java", false))
+        overlay.pendingMarks = PendingMarks.of("/repo", listOf("src/Current.java", "src/Other.java", "src/Other.java"))
+
+        val image = render(tree)
+
+        val amber = ReviewChangeTrees.PENDING.rgb and 0xFFFFFF
+        val purple = ReviewChangeTrees.HIGHLIGHT.rgb and 0xFFFFFF
+        val bar = com.intellij.util.ui.JBUI.scale(4)
+        fun rgbAt(x: Int, node: DefaultMutableTreeNode): Int {
+            val row = tree.getRowBounds(tree.getRowForPath(TreePath(node.path)))
+            return image.getRGB(x, row.y + row.height / 2) and 0xFFFFFF
+        }
+        assertEquals("purple bar first on the current file", purple, rgbAt(1, current))
+        assertEquals("amber bar right after it", amber, rgbAt(bar + 1, current))
+        assertEquals("amber bar at the edge of a pending-only file", amber, rgbAt(1, pendingOnly))
+        assertTrue("a pill follows the bar", (bar + 4 until bar + 20).any { rgbAt(it, pendingOnly) == amber })
+        assertTrue("plain file untouched", rgbAt(1, plain) != amber && rgbAt(1, plain) != purple)
+    }
+
     fun `test nothing is painted without a current file`() {
         val node = DefaultMutableTreeNode(change("/repo/src/Current.java"))
         val tree = treeWith(node)

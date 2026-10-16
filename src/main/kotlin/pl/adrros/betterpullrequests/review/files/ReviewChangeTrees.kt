@@ -1,6 +1,7 @@
 package pl.adrros.betterpullrequests.review.files
 
 import com.intellij.collaboration.util.RefComparisonChange
+import com.intellij.ide.DataManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
@@ -10,8 +11,12 @@ import com.intellij.ui.paint.RectanglePainter2D
 import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.tree.TreeUtil
+import kotlinx.coroutines.Job
+import org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel
 import pl.adrros.betterpullrequests.review.DecorationOwner
+import pl.adrros.betterpullrequests.review.Retrying
 import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics
@@ -44,6 +49,14 @@ object ReviewChangeTrees {
     /** Saturated purple, overridable by themes; the tint is drawn with alpha, so text stays readable underneath. */
     val HIGHLIGHT: Color = JBColor.namedColor("BetterPullRequests.CurrentFile.background", JBColor(Color(0x7C, 0x3A, 0xED), Color(0xA7, 0x8B, 0xFA)))
 
+    /** Amber for pending comments: distinct from the purple mark and from the platform's blue selection. */
+    val PENDING: Color = JBColor.namedColor("BetterPullRequests.PendingComments.foreground", JBColor(Color(0xE0, 0x8A, 0x00), Color(0xFB, 0xBF, 0x24)))
+
+    /** Finds the change list model above the tree; headless tests, whose data contexts are empty, replace it. */
+    var changeListModelOf: (JTree) -> GHPRChangeListViewModel? = { tree ->
+        DataManager.getInstance().getDataContext(tree).getData(GHPRChangeListViewModel.DATA_KEY)
+    }
+
     private val installed = ContainerUtil.createWeakSet<JTree>()
 
     /** The change tree the collaboration tools build for a code review (GitHub and GitLab alike). */
@@ -63,7 +76,15 @@ object ReviewChangeTrees {
         tree.addComponentListener(overlay.resizeListener)
         synchronized(installed) { installed.add(tree) }
         currentFile.track(tree)
+        if (tree is ChangesTree) Retrying.whenDisplayable(tree) { followPendingThreads(tree, overlay) }
         tree.repaint()
+    }
+
+    private fun followPendingThreads(tree: ChangesTree, overlay: CurrentFileOverlay): Boolean {
+        if (overlay.marksJob != null || tree.getClientProperty(INSTALLED) !== overlay) return true
+        val changeList = changeListModelOf(tree) ?: return false
+        overlay.marksJob = tree.project.service<ReviewTreeMarksService>().follow(changeList, overlay)
+        return true
     }
 
     fun uninstall(tree: JTree) {
@@ -72,6 +93,7 @@ object ReviewChangeTrees {
         if (overlay != null) {
             (overlay as? CurrentFileOverlay)?.let {
                 it.stopPulsing()
+                it.marksJob?.cancel()
                 tree.removeComponentListener(it.resizeListener)
                 it.currentFile.untrack(tree)
             }
@@ -97,6 +119,15 @@ object ReviewChangeTrees {
         val resizeListener = object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) = fitTree()
         }
+
+        /** Set from the EDT by [ReviewTreeMarksService]; repaints the whole tree area since marks can be anywhere. */
+        var pendingMarks: PendingMarks = PendingMarks.NONE
+            set(value) {
+                field = value
+                repaint()
+            }
+
+        var marksJob: Job? = null
 
         private var phase = 0
         private var lastMark: Rectangle? = null
@@ -138,17 +169,44 @@ object ReviewChangeTrees {
             val current = currentFile.path
             val visible = tree.visibleRect
             var marked: Rectangle? = null
-            if (current != null) {
-                for (row in visibleRows(visible)) {
-                    val path = tree.getPathForRow(row) ?: continue
-                    if (pathOf(TreeUtil.getLastUserObject(path)) != current) continue
-                    val bounds = tree.getRowBounds(row) ?: continue
+            for (row in visibleRows(visible)) {
+                val path = tree.getPathForRow(row) ?: continue
+                val nodePath = pathOf(TreeUtil.getLastUserObject(path)) ?: continue
+                val bounds = tree.getRowBounds(row) ?: continue
+                val isCurrent = current != null && !nodePath.isDirectory && nodePath == current
+                val pending = pendingMarks.countFor(nodePath)
+                if (isCurrent) {
                     paintMark(g, bounds, visible)
                     marked = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
                 }
+                if (pending > 0) paintPending(g, bounds, visible, pending, barOffset = if (isCurrent) JBUI.scale(BAR_WIDTH) else 0)
             }
             lastMark = marked
             if (marked != null && isShowing) pulse.start() else pulse.stop()
+        }
+
+        /** An amber bar beside the purple one and a small pill with the number of pending comments. */
+        private fun paintPending(g: Graphics, row: Rectangle, visible: Rectangle, count: Int, barOffset: Int) {
+            val g2 = g.create() as Graphics2D
+            try {
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                val bar = JBUI.scale(BAR_WIDTH)
+                g2.color = PENDING
+                g2.fillRect(visible.x + barOffset, row.y, bar, row.height)
+                g2.font = JBFont.small().asBold()
+                val text = count.toString()
+                val metrics = g2.fontMetrics
+                val pillHeight = (row.height - JBUI.scale(6)).coerceAtLeast(metrics.height)
+                val pillWidth = metrics.stringWidth(text) + JBUI.scale(8)
+                val pillX = visible.x + barOffset + bar + JBUI.scale(3)
+                val pillY = row.y + (row.height - pillHeight) / 2
+                RectanglePainter2D.FILL.paint(g2, pillX.toDouble(), pillY.toDouble(), pillWidth.toDouble(), pillHeight.toDouble(), pillHeight.toDouble())
+                g2.color = Color.WHITE
+                g2.drawString(text, pillX + JBUI.scale(4), pillY + (pillHeight - metrics.height) / 2 + metrics.ascent)
+            } finally {
+                g2.dispose()
+            }
         }
 
         private fun visibleRows(visible: Rectangle): IntRange {

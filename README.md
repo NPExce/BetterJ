@@ -27,6 +27,10 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    colours. It follows
    the editor file matched by path, so it works when the real file is open (review on the checked-out branch);
    a diff tab does not match. Renamed files match their new path, deleted files never do.
+6. **See where your unsent comments are** - files holding review comments of your pending (not yet submitted)
+   review get an amber bar at the left edge and a small count; a collapsed folder shows the sum of the files
+   inside. The marks disappear when the review is submitted. Unresolved discussions are already shown by the
+   bundled plugin as a comment icon with a number next to the file.
 
 ## Requirements
 
