@@ -149,6 +149,37 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertEquals("its file carries the mark", ReviewChangeTrees.PENDING.rgb and 0xFFFFFF, expanded.getRGB(1, fileRow.y + fileRow.height / 2) and 0xFFFFFF)
     }
 
+    fun `test a viewed-then-changed file gets a dash in its checkbox`() {
+        val changed = DefaultMutableTreeNode(change("/repo/src/Changed.java"))
+        val plain = DefaultMutableTreeNode(change("/repo/src/Plain.java"))
+        val folder = DefaultMutableTreeNode(LocalFilePath("/repo/src", true)).apply { add(changed); add(plain) }
+        val tree = treeWith(folder)
+        tree.cellRenderer = javax.swing.tree.TreeCellRenderer { _, value, _, _, leaf, _, _ ->
+            javax.swing.JPanel(java.awt.BorderLayout()).apply {
+                add(javax.swing.JLabel(if (leaf) "file" else "dir"), java.awt.BorderLayout.CENTER)
+                if (leaf) add(javax.swing.JCheckBox().apply { isOpaque = false }, java.awt.BorderLayout.EAST)
+            }
+        }
+        tree.expandRow(0)
+        val overlay = overlays(tree).single()
+        overlay.dismissed = PendingMarks.of("/repo", listOf("src/Changed.java"))
+
+        val image = render(tree)
+
+        val dash = ReviewChangeTrees.DISMISSED_DASH.rgb and 0xFFFFFF
+        fun dashXs(node: DefaultMutableTreeNode): List<Int> {
+            val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(node.path))!!
+            return (row.x until minOf(row.x + row.width, image.width)).filter { x ->
+                (row.y until row.y + row.height).any { y -> (image.getRGB(x, y) and 0xFFFFFF) == dash }
+            }
+        }
+        fun rowHasDash(node: DefaultMutableTreeNode) = dashXs(node).isNotEmpty()
+        assertTrue("dash painted on the changed file's checkbox", rowHasDash(changed))
+        assertFalse("plain file keeps its checkbox", rowHasDash(plain))
+        val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(changed.path))!!
+        assertTrue("the dash sits in the right-hand checkbox, not over the name", dashXs(changed).first() > row.x + minOf(row.width, image.width - row.x) / 2)
+    }
+
     fun `test uninstall cancels the pending-comments subscription`() {
         val tree = object : ChangesTree(project, false, false) {
             override fun rebuildTree() {}

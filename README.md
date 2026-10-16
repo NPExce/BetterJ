@@ -34,6 +34,14 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    shown by the bundled plugin as a comment icon with a number next to the file; a pending thread counts there too.
    Theme keys: `BetterCodeReview.CurrentFile.background`, `BetterCodeReview.PendingComments.foreground`,
    `BetterCodeReview.PendingComments.text`.
+7. **See which viewed files changed again** - GitHub drops the "viewed" tick of a file when a later commit touches
+   it, and the bundled plugin then shows an empty checkbox, same as a file never looked at. The plugin paints a dash
+   into that checkbox instead: `[ ]` not viewed, `[v]` viewed, `[-]` viewed before, changed since. Theme key:
+   `BetterCodeReview.ViewedDismissed.dash`.
+8. **Double-click opens the file** - double-click or Enter on a file in the pull request's tree opens the file
+   in the editor, which is what reading on the checked-out branch calls for; Alt+double-click and Shift+Enter
+   open the diff as before. When the pull request's branch is not the one checked out, the diff opens and a
+   balloon says why. *Double-Click Opens File* in the tree's context menu switches the behaviour off.
 
 ## Requirements
 
@@ -67,6 +75,10 @@ Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbo
 - Uploads go to github.com only; a GitHub Enterprise account gets an error balloon instead.
 - The current-file mark is a transparent overlay added to the change tree, recognised by the class name of the
   tree the collaboration tools build; an IDE update may need a follow-up.
+- The pending-comment marks and the viewed-state dash read the pull request's review data through private fields of
+  the change list model (the data itself comes from public, cached flows, so no extra requests are made). When the
+  fields are not where the plugin expects them, the marks stay off and the IDE log says so at INFO level
+  ("Tree marks ..."). Both work only in the tree of the whole pull request, not in the tree of a single commit.
 - The *Review…* button is recognised by the shape of the details action row, which GitLab merge requests share;
   it is only added where a GitHub pull request is in the context. The submit flow reuses the GitHub plugin's
   review model through its pluggable popup handler, an internal API.

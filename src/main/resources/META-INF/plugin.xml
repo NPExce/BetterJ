@@ -12,7 +12,10 @@
                 context menus): approve, request changes or comment, also after someone else already approved.
                 Authors can only comment.</li>
             <li>The changed file open in the editor is tinted purple in the pull request's file tree, so you can see where
-                you are and mark it as viewed; files with your not-yet-submitted review comments get an amber bar and a count.</li>
+                you are and mark it as viewed; files with your not-yet-submitted review comments get an amber bar and a count;
+                a file you viewed before new commits arrived shows a dash in its checkbox.</li>
+            <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
+                checked out); Alt+double-click or Shift+Enter opens the diff as before. Switchable in the tree's context menu.</li>
         </ul>
     ]]></description>
 
@@ -77,6 +80,11 @@
             <add-to-group group-id="Github.PullRequest.Details.Popup" anchor="first"/>
             <add-to-group group-id="Github.PullRequest.Changes.Popup" anchor="first"/>
             <add-to-group group-id="Github.PullRequest.Timeline.Popup" anchor="first"/>
+        </action>
+
+        <action id="BetterCodeReview.TreeOpensFile"
+                class="pl.adrros.bettercodereview.review.files.TreeOpensFile$ToggleOpensFileAction">
+            <add-to-group group-id="Github.PullRequest.Changes.Popup" anchor="last"/>
         </action>
 
         <action id="BetterCodeReview.InsertEmoji"

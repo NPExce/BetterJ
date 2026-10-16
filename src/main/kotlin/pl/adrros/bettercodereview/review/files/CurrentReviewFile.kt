@@ -8,8 +8,9 @@ import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.util.containers.ContainerUtil
 import com.intellij.openapi.vcs.actions.VcsContextFactory
+import java.util.Collections
+import java.util.WeakHashMap
 import javax.swing.JTree
 
 /**
@@ -23,7 +24,8 @@ class CurrentReviewFile(private val project: Project) {
         private set
 
     private var initialised = false
-    private val trees = ContainerUtil.createWeakSet<JTree>()
+    // A WeakHashMap-backed set: its iterator skips entries collected mid-iteration instead of throwing.
+    private val trees: MutableSet<JTree> = Collections.newSetFromMap(WeakHashMap())
 
     fun update(file: VirtualFile?) = update(file?.let { VcsContextFactory.getInstance().createFilePathOn(it) })
 

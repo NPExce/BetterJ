@@ -13,6 +13,11 @@ import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.ui.JBUI
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
+import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.launch
+import javax.swing.JCheckBox
+import javax.swing.SwingUtilities
+import javax.swing.tree.TreePath
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.launchOnShow
 import com.intellij.util.ui.tree.TreeUtil
@@ -58,6 +63,9 @@ object ReviewChangeTrees {
     /** Amber for pending comments: distinct from the purple mark and from the platform's blue selection. */
     val PENDING: Color = JBColor.namedColor("BetterCodeReview.PendingComments.foreground", JBColor(Color(0xE0, 0x8A, 0x00), Color(0xFB, 0xBF, 0x24)))
 
+    /** The dash in a dismissed "viewed" checkbox: the checkbox's own selected colour, so it reads as part of it. */
+    val DISMISSED_DASH: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dash", JBColor(Color(0x3D, 0x74, 0xF0), Color(0x5B, 0x8C, 0xFF)))
+
     /** Dark digits read on amber in both themes (white would fall below 3:1). */
     val PENDING_TEXT: Color = JBColor.namedColor("BetterCodeReview.PendingComments.text", JBColor(Color(0x1F, 0x1F, 0x1F), Color(0x1F, 0x1F, 0x1F)))
 
@@ -85,7 +93,10 @@ object ReviewChangeTrees {
         tree.addComponentListener(overlay.resizeListener)
         synchronized(installed) { installed.add(tree) }
         currentFile.track(tree)
-        if (tree is ChangesTree) overlay.marksJob = followPendingComments(tree, overlay)
+        if (tree is ChangesTree) {
+            overlay.marksJob = followReviewData(tree, overlay)
+            overlay.originalHandlers = TreeOpensFile.install(tree)
+        }
         tree.repaint()
     }
 
@@ -93,15 +104,34 @@ object ReviewChangeTrees {
      * Runs only while the tree is on screen and dies with it, which is also when the change list model is
      * published to the tree's data context. A tree for a single commit shows no PR-wide marks, like the platform.
      */
-    private fun followPendingComments(tree: ChangesTree, overlay: CurrentFileOverlay): Job =
-        tree.launchOnShow("BetterCodeReview.pendingMarks") {
-            val changeList = changeListModelOf(tree) ?: return@launchOnShow
-            if (!PendingThreadsSource.isOnLatest(changeList)) return@launchOnShow
-            val source = PendingThreadsSource.from(changeList) ?: return@launchOnShow
+    private fun followReviewData(tree: ChangesTree, overlay: CurrentFileOverlay): Job =
+        tree.launchOnShow("BetterCodeReview.treeMarks") {
+            val changeList = changeListModelOf(tree)
+            if (changeList == null) {
+                LOG.info("Tree marks off: no change list model in the tree's data context")
+                return@launchOnShow
+            }
+            if (!ReviewDataSource.isOnLatest(changeList)) {
+                LOG.info("Tree marks off: the tree shows a single commit")
+                return@launchOnShow
+            }
+            val source = ReviewDataSource.from(changeList) ?: return@launchOnShow
+            LOG.info("Tree marks following pull request data under ${source.repositoryRootPath}")
             try {
-                source.pendingCommentPaths.collect { overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it) }
+                launch {
+                    source.pendingCommentPaths.collect {
+                        LOG.debug("Pending comments in ${it.distinct().size} file(s)")
+                        overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it)
+                    }
+                }
+                launch {
+                    source.dismissedPaths.collect {
+                        LOG.debug("Viewed-then-changed files: ${it.size}")
+                        overlay.dismissed = PendingMarks.of(source.repositoryRootPath, it)
+                    }
+                }
             } catch (e: LinkageError) {
-                LOG.warn("Pending comment marks stopped: GitHub plugin API changed", e)
+                LOG.warn("Tree marks stopped: GitHub plugin API changed", e)
             }
         }
 
@@ -112,6 +142,7 @@ object ReviewChangeTrees {
             (overlay as? CurrentFileOverlay)?.let {
                 it.stopPulsing()
                 it.marksJob?.cancel()
+                it.originalHandlers?.let { handlers -> (tree as? ChangesTree)?.let { changesTree -> TreeOpensFile.uninstall(changesTree, handlers) } }
                 tree.removeComponentListener(it.resizeListener)
                 it.currentFile.untrack(tree)
             }
@@ -127,6 +158,10 @@ object ReviewChangeTrees {
     }
 
     /** The file a change-tree node stands for; directory nodes carry a directory path and never match a file. */
+    /** Where a row's renderer is painted: the platform UI stretches it to the visible width, which puts the checkbox at the right edge. */
+    fun paintedRowBounds(tree: JTree, path: TreePath): Rectangle? =
+        (tree.ui as? com.intellij.ui.tree.ui.CustomBoundsTreeUI)?.getActualPathBounds(tree, path) ?: tree.getPathBounds(path)
+
     fun pathOf(userObject: Any?): FilePath? = when (userObject) {
         is RefComparisonChange -> userObject.filePathAfter ?: userObject.filePathBefore
         is FilePath -> userObject
@@ -146,6 +181,14 @@ object ReviewChangeTrees {
             }
 
         var marksJob: Job? = null
+        var originalHandlers: TreeOpensFile.Handlers? = null
+
+        /** Files whose "viewed" tick GitHub dismissed after new changes: their checkbox gets a dash. */
+        var dismissed: PendingMarks = PendingMarks.NONE
+            set(value) {
+                field = value
+                repaint()
+            }
 
         private var phase = 0
         private var lastMark: Rectangle? = null
@@ -197,7 +240,9 @@ object ReviewChangeTrees {
                     paintMark(g, bounds, visible)
                     marked = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
                 }
-                if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf = tree.model.isLeaf(path.lastPathComponent))
+                val leaf = tree.model.isLeaf(path.lastPathComponent)
+                if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf)
+                if (leaf && dismissed.countFor(nodePath) > 0) paintDismissedDash(g, path, row)
             }
             lastMark = marked
             if (marked != null && isShowing) pulse.start() else pulse.stop()
@@ -212,6 +257,33 @@ object ReviewChangeTrees {
             return when (node) {
                 is ChangesBrowserNode<*> -> pendingMarks.sumFor(node.traverseObjectsUnder().filter(RefComparisonChange::class.java).mapNotNull { pathOf(it) })
                 else -> pendingMarks.sumUnder(nodePath)
+            }
+        }
+
+        /**
+         * GitHub shows a file viewed before the latest changes as unticked; the dash turns that tick into the
+         * "needs another look" state. The checkbox is found by laying the row's renderer out at its real bounds.
+         */
+        private fun paintDismissedDash(g: Graphics, path: TreePath, row: Int) {
+            val bounds = paintedRowBounds(tree, path) ?: return
+            val node = path.lastPathComponent
+            val renderer = tree.cellRenderer.getTreeCellRendererComponent(tree, node, tree.isRowSelected(row), false, true, row, false) as? JComponent ?: return
+            renderer.setBounds(0, 0, bounds.width, bounds.height)
+            UIUtil.layoutRecursively(renderer)
+            val checkbox = UIUtil.uiTraverser(renderer).filter(JCheckBox::class.java).firstOrNull() ?: return
+            if (!checkbox.isShowing && checkbox.width == 0) return
+            val box = SwingUtilities.convertRectangle(checkbox.parent, checkbox.bounds, renderer)
+            val size = minOf(box.width, box.height)
+            val dashWidth = (size * 0.5).toInt().coerceAtLeast(JBUI.scale(6))
+            val dashHeight = JBUI.scale(2)
+            val x = bounds.x + box.x + (box.width - dashWidth) / 2
+            val y = bounds.y + box.y + (box.height - dashHeight) / 2
+            val g2 = g.create() as Graphics2D
+            try {
+                g2.color = DISMISSED_DASH
+                g2.fillRect(x, y, dashWidth, dashHeight)
+            } finally {
+                g2.dispose()
             }
         }
 
