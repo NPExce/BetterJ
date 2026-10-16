@@ -1,7 +1,6 @@
 package pl.adrros.bettercodereview.review.files
 
 import com.intellij.collaboration.util.RefComparisonChange
-import com.intellij.collaboration.util.getOrNull
 import com.intellij.ide.DataManager
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -21,6 +20,7 @@ import com.intellij.openapi.vcs.changes.ui.VcsTreeModelData
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.util.Processor
+import org.jetbrains.plugins.github.pullrequest.data.GHPRIdentifier
 import org.jetbrains.plugins.github.pullrequest.action.GHPRActionKeys
 import org.jetbrains.plugins.github.pullrequest.ui.GHPRProjectViewModel
 import pl.adrros.bettercodereview.BetterCodeReviewBundle
@@ -55,17 +55,18 @@ object TreeOpensFile {
         val id = context.getData(GHPRActionKeys.PULL_REQUEST_ID)
         val connected = context.getData(GHPRActionKeys.PULL_REQUESTS_CONNECTED_PROJECT_VM)
             ?: context.getData(CommonDataKeys.PROJECT)?.serviceIfCreated<GHPRProjectViewModel>()?.connectedProjectVm?.value
-        val computed = connected?.prOnCurrentBranch?.value
-        val result = computed?.result
-        when {
-            id == null -> BranchState.UNKNOWN // not a GitHub pull request's tree
-            result == null || result.isFailure -> {
-                LOG.debug("Current-branch state of the pull request is ${if (result == null) "still computing" else "unavailable"}; opening the diff")
-                BranchState.UNKNOWN
-            }
-            computed.getOrNull() == id -> BranchState.CHECKED_OUT
-            else -> BranchState.OTHER
+        branchState(id, connected?.prOnCurrentBranch?.value?.result)
+    }
+
+    /** [result] is the current-branch computation: null while computing, a failure when it could not be told. */
+    fun branchState(id: GHPRIdentifier?, result: Result<GHPRIdentifier?>?): BranchState = when {
+        id == null -> BranchState.UNKNOWN // not a GitHub pull request's tree
+        result == null || result.isFailure -> {
+            LOG.debug("Current-branch state of the pull request is ${if (result == null) "still computing" else "unavailable"}; opening the diff")
+            BranchState.UNKNOWN
         }
+        result.getOrNull() == id -> BranchState.CHECKED_OUT
+        else -> BranchState.OTHER
     }
 
     /** Shows the "branch not checked out" hint at the selected row; replaceable in headless tests. */
@@ -124,10 +125,14 @@ object TreeOpensFile {
 
     /** Restores the originals, unless something else has replaced the wrappers since. */
     fun uninstall(tree: ChangesTree, handlers: Handlers) {
-        if (tree.doubleClickHandler === handlers.doubleClick) tree.doubleClickHandler = handlers.originalDoubleClick
-        if (tree.enterKeyHandler === handlers.enter) tree.enterKeyHandler = handlers.originalEnter
-        tree.putClientProperty(ORIGINAL_DOUBLE_CLICK, null)
-        tree.putClientProperty(ORIGINAL_ENTER, null)
+        if (tree.doubleClickHandler === handlers.doubleClick) {
+            tree.doubleClickHandler = handlers.originalDoubleClick
+            tree.putClientProperty(ORIGINAL_DOUBLE_CLICK, null)
+        }
+        if (tree.enterKeyHandler === handlers.enter) {
+            tree.enterKeyHandler = handlers.originalEnter
+            tree.putClientProperty(ORIGINAL_ENTER, null)
+        }
     }
 
     /** A failure inside the plugin must not swallow the click: the original handler then opens the diff. */
@@ -149,8 +154,9 @@ object TreeOpensFile {
         if (tree.selectionCount != 1 || !tree.model.isLeaf(selection.lastPathComponent)) return false
         val change = VcsTreeModelData.exactlySelected(tree).iterateUserObjects(RefComparisonChange::class.java).toList().singleOrNull() ?: return false
         val path = change.filePathAfter ?: return false // deleted in the pull request: only the diff can show it
-        val changeList = ReviewChangeTrees.changeListModelOf(tree)
-        if (changeList != null && !ReviewDataSource.isOnLatest(changeList)) return false // one commit's tree: the local file is another version
+        // Only the GitHub tree of the whole pull request: a GitLab tree has no such model, one commit's tree would show another version.
+        val changeList = ReviewChangeTrees.changeListModelOf(tree) ?: return false
+        if (!ReviewDataSource.isOnLatest(changeList)) return false
         when (pullRequestBranch(tree)) {
             BranchState.CHECKED_OUT -> {}
             BranchState.OTHER -> {

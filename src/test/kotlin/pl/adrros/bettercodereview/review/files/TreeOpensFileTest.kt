@@ -43,11 +43,28 @@ class TreeOpensFileTest : BasePlatformTestCase() {
     private var tempDir: File? = null
     private lateinit var defaultBranchLookup: (javax.swing.JTree) -> TreeOpensFile.BranchState
     private lateinit var defaultHint: (ChangesTree, String) -> Unit
+    private lateinit var defaultChangeListLookup: (javax.swing.JTree) -> org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel?
+    private var onLatest = true
+
+    /** The data context is empty headless; a proxy stands in for the pull request's change list model. */
+    private fun changeListModel(): org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel {
+        val type = org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel::class.java
+        return java.lang.reflect.Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { _, method, _ ->
+            when (method.name) {
+                "isOnLatest" -> onLatest
+                "toString" -> "fake change list model"
+                "hashCode" -> 1
+                else -> throw UnsupportedOperationException(method.name)
+            }
+        } as org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel
+    }
 
     override fun setUp() {
         super.setUp()
         defaultBranchLookup = TreeOpensFile.pullRequestBranch
         defaultHint = TreeOpensFile.showHint
+        defaultChangeListLookup = ReviewChangeTrees.changeListModelOf
+        ReviewChangeTrees.changeListModelOf = { changeListModel() }
         TreeOpensFile.pullRequestBranch = { branch }
         TreeOpensFile.showHint = { _, text -> hints += text }
         TreeOpensFile.isEnabled = true
@@ -81,6 +98,7 @@ class TreeOpensFileTest : BasePlatformTestCase() {
             treeOrNull?.let { ReviewChangeTrees.uninstall(it) }
             if (::defaultBranchLookup.isInitialized) TreeOpensFile.pullRequestBranch = defaultBranchLookup
             if (::defaultHint.isInitialized) TreeOpensFile.showHint = defaultHint
+            if (::defaultChangeListLookup.isInitialized) ReviewChangeTrees.changeListModelOf = defaultChangeListLookup
             TreeOpensFile.isEnabled = true
             val editors = FileEditorManager.getInstance(project)
             editors.openFiles.forEach { editors.closeFile(it) }
@@ -166,6 +184,28 @@ class TreeOpensFileTest : BasePlatformTestCase() {
         assertEquals(1, hints.size)
         assertTrue(hints.single().contains("Double-Click Opens File"))
         assertEmpty(openFiles)
+    }
+
+    fun `test a tree of one commit, or without the pull request's change list model, falls back to the diff`() {
+        onLatest = false
+        select(fileNode)
+        doubleClick()
+        ReviewChangeTrees.changeListModelOf = { null }
+        doubleClick()
+        assertEquals(2, originalDoubleClicks.size)
+        assertEmpty(hints)
+        assertEmpty(openFiles)
+    }
+
+    fun `test the branch state is unknown without an id, while computing and after a failure`() {
+        val id = org.jetbrains.plugins.github.pullrequest.data.GHPRIdentifier("node", 7L)
+        val other = org.jetbrains.plugins.github.pullrequest.data.GHPRIdentifier("node2", 8L)
+        assertEquals(TreeOpensFile.BranchState.UNKNOWN, TreeOpensFile.branchState(null, Result.success(id)))
+        assertEquals(TreeOpensFile.BranchState.UNKNOWN, TreeOpensFile.branchState(id, null))
+        assertEquals(TreeOpensFile.BranchState.UNKNOWN, TreeOpensFile.branchState(id, Result.failure(IllegalStateException("x"))))
+        assertEquals(TreeOpensFile.BranchState.CHECKED_OUT, TreeOpensFile.branchState(id, Result.success(id)))
+        assertEquals(TreeOpensFile.BranchState.OTHER, TreeOpensFile.branchState(id, Result.success(other)))
+        assertEquals(TreeOpensFile.BranchState.OTHER, TreeOpensFile.branchState(id, Result.success(null)))
     }
 
     fun `test a tree without a GitHub pull request falls back silently`() {

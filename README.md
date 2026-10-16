@@ -44,8 +44,8 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    in the context menu open the diff as before (the platform ignores Enter with modifiers, so there is no
    keyboard variant). When the pull request's branch is not the one checked out, the diff opens and a balloon
    says why, once per tree. "Checked out" means the branch, not that the working copy equals the pull request's
-   head: unpulled commits or local edits can make line comments point elsewhere. In the tree of a single commit
-   the diff opens, since the local file is another version. *Double-Click Opens File* in the tree's context menu
+   head: unpulled commits or local edits can make line comments point elsewhere. Only the tree of the whole GitHub
+   pull request is affected: in the tree of a single commit, and in a GitLab merge request, the diff opens as before. *Double-Click Opens File* in the tree's context menu
    switches the behaviour off.
 
 ## Requirements

@@ -12,7 +12,9 @@ import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.util.ui.JBUI
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
+import com.intellij.ui.render.RenderingUtil
 import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import javax.swing.JCheckBox
 import javax.swing.SwingUtilities
@@ -123,44 +125,56 @@ object ReviewChangeTrees {
      */
     private fun followReviewData(tree: ChangesTree, overlay: CurrentFileOverlay): Job =
         tree.launchOnShow("BetterCodeReview.treeMarks") {
-            // The first show of a tree is logged at INFO, so the IDE log tells whether the marks run; later shows at DEBUG.
-            val log: (String) -> Unit = if (overlay.startLogged) LOG::debug else LOG::info
-            overlay.startLogged = true
-            val changeList = changeListModelOf(tree)
-            if (changeList == null) {
-                log("Tree marks off: no change list model in the tree's data context")
-                return@launchOnShow
+            try {
+                followReviewDataOnShow(tree, overlay)
+            } catch (e: LinkageError) {
+                LOG.warn("Tree marks stopped: GitHub plugin API changed", e)
             }
-            if (!ReviewDataSource.isOnLatest(changeList)) {
-                log("Tree marks off: the tree shows a single commit")
-                return@launchOnShow
-            }
-            val source = ReviewDataSource.from(changeList) ?: return@launchOnShow
-            log("Tree marks following pull request data under ${source.repositoryRootPath}")
-            // Each collector fails on its own: a GitHub plugin change breaking one mark must not take the other down.
-            launch {
-                collectMarks("pending comments") {
-                    source.pendingCommentPaths.collect {
-                        if (LOG.isDebugEnabled) LOG.debug("Pending comments in ${it.distinct().size} file(s)")
-                        overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it)
-                    }
-                }
-            }
-            launch {
-                collectMarks("viewed-then-changed files") {
-                    source.dismissedPaths.collect {
-                        if (LOG.isDebugEnabled) LOG.debug("Viewed-then-changed files: ${it.size}")
-                        overlay.dismissed = PendingMarks.of(source.repositoryRootPath, it)
-                    }
+        }
+
+    private suspend fun kotlinx.coroutines.CoroutineScope.followReviewDataOnShow(tree: ChangesTree, overlay: CurrentFileOverlay) {
+        // Each distinct outcome is logged at INFO once per tree, so the IDE log tells whether the marks run; repeats at DEBUG.
+        fun log(message: String) = if (overlay.loggedOutcomes.add(message)) LOG.info(message) else LOG.debug(message)
+        val changeList = changeListModelOf(tree)
+        if (changeList == null) {
+            log("Tree marks off: no change list model in the tree's data context")
+            return
+        }
+        if (!ReviewDataSource.isOnLatest(changeList)) {
+            log("Tree marks off: the tree shows a single commit")
+            return
+        }
+        val source = ReviewDataSource.from(changeList)
+        if (source == null) {
+            log("Tree marks off: the change list model has no reachable data provider (details at DEBUG level)")
+            return
+        }
+        log("Tree marks following pull request data under ${source.repositoryRootPath}")
+        // Each collector fails on its own: a GitHub plugin change breaking one mark must not take the other down.
+        launch {
+            collectMarks("pending comments") {
+                source.pendingCommentPaths.collect {
+                    if (LOG.isDebugEnabled) LOG.debug("Pending comments in ${it.distinct().size} file(s)")
+                    overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it)
                 }
             }
         }
+        launch {
+            collectMarks("viewed-then-changed files") {
+                source.dismissedPaths.collect {
+                    if (LOG.isDebugEnabled) LOG.debug("Viewed-then-changed files: ${it.size}")
+                    overlay.dismissed = PendingMarks.of(source.repositoryRootPath, it)
+                }
+            }
+        }
+    }
 
     private suspend fun collectMarks(what: String, collect: suspend () -> Unit) {
         try {
             collect()
         } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
+            kotlin.coroutines.coroutineContext.ensureActive() // our own cancellation propagates; a foreign one ends the marks quietly
+            LOG.info("Marks for $what stopped: the pull request data was cancelled")
         } catch (e: Throwable) {
             LOG.warn("Marks for $what stopped: GitHub plugin API changed", e)
         }
@@ -225,7 +239,7 @@ object ReviewChangeTrees {
 
         var marksJob: Job? = null
         var handlers: TreeOpensFile.Handlers? = null
-        var startLogged = false
+        val loggedOutcomes = HashSet<String>()
 
         /** Files whose "viewed" tick GitHub dismissed after new changes: their checkbox gets a dash. */
         var dismissed: PendingMarks = PendingMarks.NONE
@@ -332,7 +346,7 @@ object ReviewChangeTrees {
                     // a checkbox instead of the dot and needs none.
                     val hovered = com.intellij.ui.hover.TreeHoverListener.getHoveredRow(tree) == row
                     if (!hovered) {
-                        g2.color = if (tree.isRowSelected(row)) UIUtil.getTreeSelectionBackground(tree.hasFocus()) else UIUtil.getTreeBackground()
+                        g2.color = if (tree.isRowSelected(row)) RenderingUtil.getSelectionBackground(tree) else RenderingUtil.getBackground(tree)
                         g2.fillRect(x - JBUI.scale(1), y - JBUI.scale(2), dashWidth + 2 * JBUI.scale(1), dashHeight + 2 * JBUI.scale(2))
                     }
                     g2.color = DISMISSED_DASH

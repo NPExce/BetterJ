@@ -4,6 +4,8 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.conflate
@@ -93,7 +95,9 @@ class ReviewDataSource internal constructor(
                 val loaded = try {
                     provider.loadViewedState()
                 } catch (e: CancellationException) {
-                    throw e
+                    currentCoroutineContext().ensureActive() // the provider's own scope went away: a failed load, not ours
+                    LOG.debug("Viewed state load was cancelled by the provider", e)
+                    return@transform
                 } catch (e: Exception) {
                     // The next reload signal (a tick, a refresh, new commits) retries; the first failure is worth a warning.
                     if (warned) LOG.debug("Viewed state load failed again", e) else LOG.warn("Viewed state load failed; the viewed-then-changed marks wait for the next reload", e)
@@ -106,8 +110,7 @@ class ReviewDataSource internal constructor(
         }
 
         private fun unavailable(e: Throwable): ReviewDataSource? {
-            LOG.info("Tree marks unavailable: the change list model has no reachable data provider (${e.javaClass.simpleName}: ${e.message})")
-            LOG.debug(e)
+            LOG.debug("Tree marks unavailable: the change list model has no reachable data provider", e)
             return null
         }
 

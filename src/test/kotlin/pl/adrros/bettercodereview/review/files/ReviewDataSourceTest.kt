@@ -37,14 +37,20 @@ class ReviewDataSourceTest {
 
     private class FakeProvider : GHPRViewedStateDataProvider {
         val loads = mutableListOf<Map<String, GHPullRequestFileViewedState>?>() // null = fail this load
-        @Volatile var served = 0
+        private val counter = java.util.concurrent.atomic.AtomicInteger()
+        val served get() = counter.get()
         val signal = MutableSharedFlow<Unit>()
+        /** Subscribers to the reload signal at the moment of the first load: the source must subscribe before it loads. */
+        @Volatile var subscribersAtFirstLoad = -1
         /** When set, the first load waits for it, so a reload signal can land while the first load is in flight. */
         var firstLoadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         override val viewedStateNeedsReloadSignal get() = signal
         override suspend fun loadViewedState(): Map<String, GHPullRequestFileViewedState> {
-            val index = served++
-            if (index == 0) firstLoadGate?.await()
+            val index = counter.getAndIncrement()
+            if (index == 0) {
+                subscribersAtFirstLoad = signal.subscriptionCount.value
+                firstLoadGate?.await()
+            }
             return loads[index] ?: throw IllegalStateException("load failed")
         }
         override suspend fun updateViewedState(paths: Iterable<String>, isViewed: Boolean) {}
@@ -68,6 +74,7 @@ class ReviewDataSourceTest {
             job.join()
         }
         assertEquals(listOf(mapOf("a" to GHPullRequestFileViewedState.VIEWED), mapOf("a" to GHPullRequestFileViewedState.DISMISSED)), collected)
+        assertEquals("subscribed to the reload signal before the first load", 1, provider.subscribersAtFirstLoad)
     }
 
     private open class GHPRCumulativeChangeListViewModel
