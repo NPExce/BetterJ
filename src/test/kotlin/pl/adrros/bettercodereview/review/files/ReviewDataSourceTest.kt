@@ -37,15 +37,61 @@ class ReviewDataSourceTest {
 
     private class FakeProvider : GHPRViewedStateDataProvider {
         val loads = mutableListOf<Map<String, GHPullRequestFileViewedState>?>() // null = fail this load
-        var served = 0
+        @Volatile var served = 0
         val signal = MutableSharedFlow<Unit>()
+        /** When set, the first load waits for it, so a reload signal can land while the first load is in flight. */
+        var firstLoadGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         override val viewedStateNeedsReloadSignal get() = signal
         override suspend fun loadViewedState(): Map<String, GHPullRequestFileViewedState> {
-            val next = loads[served++]
-            return next ?: throw IllegalStateException("load failed")
+            val index = served++
+            if (index == 0) firstLoadGate?.await()
+            return loads[index] ?: throw IllegalStateException("load failed")
         }
         override suspend fun updateViewedState(paths: Iterable<String>, isViewed: Boolean) {}
         override suspend fun signalViewedStateNeedsReload() {}
+    }
+
+    @Test
+    fun `a reload signalled during the first load is not lost`() = runBlocking {
+        val provider = FakeProvider()
+        provider.firstLoadGate = kotlinx.coroutines.CompletableDeferred()
+        provider.loads += mapOf("a" to GHPullRequestFileViewedState.VIEWED)
+        provider.loads += mapOf("a" to GHPullRequestFileViewedState.DISMISSED)
+        val collected = mutableListOf<Map<String, GHPullRequestFileViewedState>>()
+        val job = launch(kotlinx.coroutines.Dispatchers.Default) {
+            ReviewDataSource.viewedStatesOf(provider).take(2).toList(collected)
+        }
+        withTimeout(5000) {
+            while (provider.served < 1) kotlinx.coroutines.delay(10)
+            provider.signal.emit(Unit) // arrives while the first load is still running
+            provider.firstLoadGate!!.complete(Unit)
+            job.join()
+        }
+        assertEquals(listOf(mapOf("a" to GHPullRequestFileViewedState.VIEWED), mapOf("a" to GHPullRequestFileViewedState.DISMISSED)), collected)
+    }
+
+    private open class GHPRCumulativeChangeListViewModel
+    private class GHPRCumulativeChangeListViewModelImpl : GHPRCumulativeChangeListViewModel()
+    private class GHPRCommitChangeListViewModelImpl
+    private class SaysSo { @Suppress("unused") fun isOnLatest(): Boolean = false }
+    private open class Base { @Suppress("unused") private val dataProvider = "from the base class" }
+    private class Derived : Base()
+
+    @Test
+    fun `without isOnLatest the model kind is told from the 2026_3 class names`() {
+        assertEquals(false, ReviewDataSource.isOnLatest(SaysSo()))
+        assertEquals(true, ReviewDataSource.isOnLatest(GHPRCumulativeChangeListViewModelImpl()))
+        assertEquals(false, ReviewDataSource.isOnLatest(GHPRCommitChangeListViewModelImpl()))
+    }
+
+    @Test
+    fun `private fields are found in a superclass`() {
+        assertEquals("from the base class", ReviewDataSource.privateField(Derived(), "dataProvider"))
+        try {
+            ReviewDataSource.privateField(Derived(), "missing")
+            org.junit.Assert.fail("expected NoSuchFieldException")
+        } catch (expected: NoSuchFieldException) {
+        }
     }
 
     @Test

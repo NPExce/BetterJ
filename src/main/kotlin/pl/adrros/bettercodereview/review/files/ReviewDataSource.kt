@@ -54,7 +54,7 @@ class ReviewDataSource internal constructor(
          * False only for a change list pinned to one commit. 2026.1 and 2026.2 say so through `isOnLatest()`;
          * 2026.3 splits the model into a cumulative and a per-commit class instead, told apart by name.
          */
-        fun isOnLatest(changeList: GHPRChangeListViewModel): Boolean {
+        fun isOnLatest(changeList: Any): Boolean {
             runCatching { changeList.javaClass.getMethod("isOnLatest").invoke(changeList) as? Boolean }.getOrNull()?.let { return it }
             val types = generateSequence<Class<*>>(changeList.javaClass) { it.superclass }.flatMap { sequenceOf(it) + it.interfaces.asSequence() }
             if (types.any { it.simpleName == "GHPRCumulativeChangeListViewModel" }) return true
@@ -100,6 +100,7 @@ class ReviewDataSource internal constructor(
                     warned = true
                     return@transform
                 }
+                warned = false
                 emit(loaded)
             }
         }
@@ -111,7 +112,7 @@ class ReviewDataSource internal constructor(
         }
 
         /** Looks the field up along the class hierarchy: 2026.3 declares it in a shared base class. */
-        private fun privateField(target: Any, name: String): Any? {
+        internal fun privateField(target: Any, name: String): Any? {
             val field = generateSequence<Class<*>>(target.javaClass) { it.superclass }
                 .firstNotNullOfOrNull { type -> type.declaredFields.firstOrNull { it.name == name } }
                 ?: throw NoSuchFieldException("$name in ${target.javaClass.name}")

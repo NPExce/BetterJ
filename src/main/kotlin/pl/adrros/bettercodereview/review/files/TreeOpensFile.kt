@@ -56,8 +56,13 @@ object TreeOpensFile {
         val connected = context.getData(GHPRActionKeys.PULL_REQUESTS_CONNECTED_PROJECT_VM)
             ?: context.getData(CommonDataKeys.PROJECT)?.serviceIfCreated<GHPRProjectViewModel>()?.connectedProjectVm?.value
         val computed = connected?.prOnCurrentBranch?.value
+        val result = computed?.result
         when {
-            id == null || computed == null || computed.result == null -> BranchState.UNKNOWN // no GitHub PR here, or still computing
+            id == null -> BranchState.UNKNOWN // not a GitHub pull request's tree
+            result == null || result.isFailure -> {
+                LOG.debug("Current-branch state of the pull request is ${if (result == null) "still computing" else "unavailable"}; opening the diff")
+                BranchState.UNKNOWN
+            }
             computed.getOrNull() == id -> BranchState.CHECKED_OUT
             else -> BranchState.OTHER
         }
@@ -130,6 +135,7 @@ object TreeOpensFile {
         try {
             openSelectedFile(tree, handlers)
         } catch (e: Exception) {
+            if (e is com.intellij.openapi.diagnostic.ControlFlowException || e is kotlinx.coroutines.CancellationException) throw e
             LOG.warn("Opening the file from the change tree failed; opening the diff instead", e)
             false
         } catch (e: LinkageError) {

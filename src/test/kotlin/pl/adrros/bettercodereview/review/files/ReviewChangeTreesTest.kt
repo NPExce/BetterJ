@@ -184,13 +184,37 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
             }
         }
         val dash = ReviewChangeTrees.DISMISSED_DASH.rgb and 0xFFFFFF
-        val white = ReviewChangeTrees.DISMISSED_DASH_ON_CURRENT.rgb and 0xFFFFFF
+        val onCurrent = ReviewChangeTrees.DISMISSED_DASH_ON_CURRENT.rgb and 0xFFFFFF
         assertTrue("dash painted over the unread dot of the changed file", xsOf(changed, dash).isNotEmpty())
         val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(changed.path))!!
         assertTrue("the dash sits in the right-hand slot, not over the name", xsOf(changed, dash).first() > row.x + minOf(row.width, image.width - row.x) / 2)
-        assertTrue("the open file's dash is white on the purple tint", xsOf(changedCurrent, white).size >= com.intellij.util.ui.JBUI.scale(8))
+        val currentDash = xsOf(changedCurrent, onCurrent)
+        assertTrue("the open file's dash uses the on-tint colour", currentDash.size >= com.intellij.util.ui.JBUI.scale(8))
+        assertTrue("and sits in the slot too", currentDash.first() > row.x + minOf(row.width, image.width - row.x) / 2)
+        assertEmpty("the open file's row has no plain dash", xsOf(changedCurrent, dash))
         assertEmpty("plain file keeps its dot", xsOf(plain, dash))
         assertEmpty("viewed file keeps its tick", xsOf(viewed, dash))
+    }
+
+    fun `test a partial repaint outside the current row keeps the mark remembered`() {
+        val current = DefaultMutableTreeNode(change("/repo/src/Current.java"))
+        val other = DefaultMutableTreeNode(change("/repo/src/Other.java"))
+        val tree = treeWith(current, other)
+        val overlay = overlays(tree).single()
+        project.service<CurrentReviewFile>().update(LocalFilePath("/repo/src/Current.java", false))
+        render(tree)
+        val marked = overlay.markedRow
+        assertNotNull(marked)
+
+        val otherRow = tree.getRowBounds(tree.getRowForPath(TreePath(other.path)))
+        val image = BufferedImage(tree.width, tree.height, BufferedImage.TYPE_INT_RGB)
+        val g = image.createGraphics()
+        g.setClip(0, otherRow.y, tree.width, otherRow.height)
+        overlay.paint(g)
+        g.dispose()
+        assertEquals("the pulse target survives a repaint of another row", marked, overlay.markedRow)
+        val bar = ReviewChangeTrees.HIGHLIGHT.rgb and 0xFFFFFF
+        assertTrue("nothing painted outside the clip", (image.getRGB(1, marked!!.y + marked.height / 2) and 0xFFFFFF) != bar)
     }
 
     fun `test the slot is the viewed checkbox or the unread dot and nothing else`() {

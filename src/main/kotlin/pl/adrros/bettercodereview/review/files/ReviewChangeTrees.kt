@@ -64,12 +64,23 @@ object ReviewChangeTrees {
     /** The dash over a dismissed "viewed" slot: the theme's selected-checkbox colour, so it reads as part of the checkbox. */
     val DISMISSED_DASH: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dash", JBColor.namedColor("Checkbox.Background.Selected", JBColor(Color(0x3D, 0x74, 0xF0), Color(0x5B, 0x8C, 0xFF))))
 
-    /** The unread dot the collaboration tools show for a file without a tick; its icon identifies the state slot. */
-    fun isStateSlot(component: Component): Boolean =
-        component is JCheckBox || (component is javax.swing.JLabel && component.icon != null && component.icon === icons.CollaborationToolsIcons.Review.FileUnread)
+    // The unread-dot icon lives in experimental API; a build that renames it must not fail every paint.
+    private var unreadIconAvailable = true
 
-    /** On the purple current-file tint the blue dash would fade to about 1.5:1; white reads there in both themes. */
-    val DISMISSED_DASH_ON_CURRENT: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dashOnCurrent", JBColor(Color.WHITE, Color.WHITE))
+    /** The unread dot the collaboration tools show for a file without a tick; its icon identifies the state slot. */
+    fun isStateSlot(component: Component): Boolean {
+        if (component is JCheckBox) return true
+        if (component !is javax.swing.JLabel || component.icon == null || !unreadIconAvailable) return false
+        return try {
+            component.icon === icons.CollaborationToolsIcons.Review.FileUnread
+        } catch (e: LinkageError) {
+            unreadIconAvailable = false
+            false
+        }
+    }
+
+    /** On the purple current-file tint the blue dash would fade to about 1.5:1; near-black (light) and white (dark) read there. */
+    val DISMISSED_DASH_ON_CURRENT: Color = JBColor.namedColor("BetterCodeReview.ViewedDismissed.dashOnCurrent", JBColor(Color(0x1F, 0x1F, 0x1F), Color.WHITE))
 
     /** Dark digits read on amber in both themes (white would fall below 3:1). */
     val PENDING_TEXT: Color = JBColor.namedColor("BetterCodeReview.PendingComments.text", JBColor(Color(0x1F, 0x1F, 0x1F), Color(0x1F, 0x1F, 0x1F)))
@@ -92,7 +103,7 @@ object ReviewChangeTrees {
     }
 
     fun install(tree: JTree, currentFile: CurrentReviewFile) {
-        (tree.getClientProperty(INSTALLED) as? JComponent)?.let { tree.remove(it) } // left by a version unloaded without restart
+        (tree.getClientProperty(INSTALLED) as? JComponent)?.let { if (DecorationOwner.owns(it)) uninstall(tree) else tree.remove(it) } // left by a version unloaded without restart
         val overlay = CurrentFileOverlay(tree, currentFile)
         tree.putClientProperty(INSTALLED, overlay)
         tree.add(overlay)
@@ -130,7 +141,7 @@ object ReviewChangeTrees {
             launch {
                 collectMarks("pending comments") {
                     source.pendingCommentPaths.collect {
-                        LOG.debug("Pending comments in ${it.distinct().size} file(s)")
+                        if (LOG.isDebugEnabled) LOG.debug("Pending comments in ${it.distinct().size} file(s)")
                         overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it)
                     }
                 }
@@ -138,7 +149,7 @@ object ReviewChangeTrees {
             launch {
                 collectMarks("viewed-then-changed files") {
                     source.dismissedPaths.collect {
-                        LOG.debug("Viewed-then-changed files: ${it.size}")
+                        if (LOG.isDebugEnabled) LOG.debug("Viewed-then-changed files: ${it.size}")
                         overlay.dismissed = PendingMarks.of(source.repositoryRootPath, it)
                     }
                 }
@@ -201,9 +212,6 @@ object ReviewChangeTrees {
     }
 
     class CurrentFileOverlay(private val tree: JTree, val currentFile: CurrentReviewFile) : JComponent() {
-        /** State-slot rectangle inside a laid-out renderer, per renderer size: rows of one size share one layout. */
-        private val stateSlots = HashMap<java.awt.Dimension, Rectangle?>()
-
         val resizeListener = object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) = fitTree()
         }
@@ -223,7 +231,6 @@ object ReviewChangeTrees {
         var dismissed: PendingMarks = PendingMarks.NONE
             set(value) {
                 field = value
-                stateSlots.clear()
                 repaint()
             }
 
@@ -235,6 +242,9 @@ object ReviewChangeTrees {
         }
 
         val isPulsing: Boolean get() = pulse.isRunning
+
+        /** The current file's row as of the last paint, for tests. */
+        internal val markedRow: Rectangle? get() = lastMark
 
         init {
             isOpaque = false
@@ -258,7 +268,6 @@ object ReviewChangeTrees {
 
         private fun fitTree() {
             bounds = Rectangle(0, 0, tree.width, tree.height)
-            stateSlots.clear()
         }
 
         /** Never a mouse or tooltip target: clicks go to the tree underneath. */
@@ -273,13 +282,12 @@ object ReviewChangeTrees {
                 val path = tree.getPathForRow(row) ?: continue
                 val nodePath = pathOf(TreeUtil.getLastUserObject(path)) ?: continue
                 val bounds = tree.getRowBounds(row) ?: continue
-                if (clip != null && !clip.intersects(Rectangle(visible.x, bounds.y, visible.width, bounds.height))) continue
+                val rowRect = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
                 val isCurrent = current != null && !nodePath.isDirectory && nodePath == current
+                if (isCurrent) marked = rowRect // remembered even outside the clip, so a partial repaint keeps the pulse alive
+                if (clip != null && !clip.intersects(rowRect)) continue
                 val pending = pendingCountFor(path, nodePath)
-                if (isCurrent) {
-                    paintMark(g, bounds, visible)
-                    marked = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
-                }
+                if (isCurrent) paintMark(g, bounds, visible)
                 val leaf = tree.model.isLeaf(path.lastPathComponent)
                 if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf)
                 if (leaf && dismissed.countFor(nodePath) > 0) paintDismissedDash(g, path, row, isCurrent)
@@ -303,11 +311,12 @@ object ReviewChangeTrees {
         /**
          * GitHub drops the "viewed" tick of a file changed after it was viewed, and the bundled plugin then shows
          * the same unread dot as for a file never looked at (the checkbox only appears under the mouse). The dash
-         * over that slot turns it into the "viewed before, changed since" state.
+         * over that slot turns it into the "viewed before, changed since" state. The slot is located per paint:
+         * only visible dismissed rows pay for it, and its place shifts with the comment badge beside it.
          */
         private fun paintDismissedDash(g: Graphics, path: TreePath, row: Int, isCurrent: Boolean) {
             val bounds = paintedRowBounds(tree, path) ?: return
-            val slot = stateSlots.getOrPut(java.awt.Dimension(bounds.width, bounds.height)) { stateSlot(path, row, bounds) } ?: return
+            val slot = stateSlot(path, row, bounds) ?: return
             val size = minOf(slot.width, slot.height)
             val dashWidth = (size * 0.6).toInt().coerceAtLeast(JBUI.scale(8))
             val dashHeight = JBUI.scale(2)
@@ -315,15 +324,26 @@ object ReviewChangeTrees {
             val y = bounds.y + slot.y + (slot.height - dashHeight) / 2
             val g2 = g.create() as Graphics2D
             try {
-                // A halo in the row's background separates the dash from the dot or checkbox underneath.
-                g2.color = if (tree.isRowSelected(row)) UIUtil.getTreeSelectionBackground(tree.hasFocus()) else UIUtil.getTreeBackground()
-                g2.fillRect(x - JBUI.scale(1), y - JBUI.scale(2), dashWidth + 2 * JBUI.scale(1), dashHeight + 2 * JBUI.scale(2))
-                g2.color = if (isCurrent) DISMISSED_DASH_ON_CURRENT else DISMISSED_DASH
+                if (isCurrent) {
+                    // No halo here: it would punch a hole into the tint. The dash contrasts with the tinted row instead.
+                    g2.color = DISMISSED_DASH_ON_CURRENT
+                } else {
+                    // A halo in the row's background separates the dash from the dot underneath; the hovered row shows
+                    // a checkbox instead of the dot and needs none.
+                    val hovered = com.intellij.ui.hover.TreeHoverListener.getHoveredRow(tree) == row
+                    if (!hovered) {
+                        g2.color = if (tree.isRowSelected(row)) UIUtil.getTreeSelectionBackground(tree.hasFocus()) else UIUtil.getTreeBackground()
+                        g2.fillRect(x - JBUI.scale(1), y - JBUI.scale(2), dashWidth + 2 * JBUI.scale(1), dashHeight + 2 * JBUI.scale(2))
+                    }
+                    g2.color = DISMISSED_DASH
+                }
                 g2.fillRect(x, y, dashWidth, dashHeight)
             } finally {
                 g2.dispose()
             }
         }
+
+        private var slotMissingLogged = false
 
         /** The viewed checkbox when the renderer shows one, else the unread-dot label; null when the renderer has neither. */
         private fun stateSlot(path: TreePath, row: Int, bounds: Rectangle): Rectangle? {
@@ -331,8 +351,14 @@ object ReviewChangeTrees {
             val renderer = tree.cellRenderer.getTreeCellRendererComponent(tree, node, tree.isRowSelected(row), false, true, row, false) as? JComponent ?: return null
             renderer.setBounds(0, 0, bounds.width, bounds.height)
             UIUtil.layoutRecursively(renderer)
-            val slot = UIUtil.uiTraverser(renderer).filter(Component::class.java).firstOrNull { isStateSlot(it) } ?: return null
-            if (slot.width == 0) return null
+            val slot = UIUtil.uiTraverser(renderer).filter(Component::class.java).firstOrNull { isStateSlot(it) }
+            if (slot == null || slot.width == 0) {
+                if (!slotMissingLogged) {
+                    slotMissingLogged = true
+                    LOG.info("Viewed-then-changed mark skipped: the row renderer has no viewed checkbox or unread dot (renderer ${renderer.javaClass.name})")
+                }
+                return null
+            }
             return SwingUtilities.convertRectangle(slot.parent, slot.bounds, renderer)
         }
 
