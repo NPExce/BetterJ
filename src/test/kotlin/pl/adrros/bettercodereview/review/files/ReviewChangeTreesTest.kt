@@ -149,35 +149,55 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertEquals("its file carries the mark", ReviewChangeTrees.PENDING.rgb and 0xFFFFFF, expanded.getRGB(1, fileRow.y + fileRow.height / 2) and 0xFFFFFF)
     }
 
-    fun `test a viewed-then-changed file gets a dash in its checkbox`() {
-        val changed = DefaultMutableTreeNode(change("/repo/src/Changed.java"))
-        val plain = DefaultMutableTreeNode(change("/repo/src/Plain.java"))
-        val folder = DefaultMutableTreeNode(LocalFilePath("/repo/src", true)).apply { add(changed); add(plain) }
-        val tree = treeWith(folder)
-        tree.cellRenderer = javax.swing.tree.TreeCellRenderer { _, value, _, _, leaf, _, _ ->
-            javax.swing.JPanel(java.awt.BorderLayout()).apply {
-                add(javax.swing.JLabel(if (leaf) "file" else "dir"), java.awt.BorderLayout.CENTER)
-                if (leaf) add(javax.swing.JCheckBox().apply { isOpaque = false }, java.awt.BorderLayout.EAST)
+    /** Like the collaboration tools renderer: a checkbox for viewed files, the unread dot for the rest, nothing for folders. */
+    private fun nativeLikeRenderer(viewed: Set<String>) = javax.swing.tree.TreeCellRenderer { _, value, _, _, leaf, _, _ ->
+        javax.swing.JPanel(java.awt.BorderLayout()).apply {
+            add(javax.swing.JLabel(if (leaf) "file" else "dir"), java.awt.BorderLayout.CENTER)
+            if (leaf) {
+                val name = ReviewChangeTrees.pathOf((value as DefaultMutableTreeNode).userObject)!!.name
+                val slot = if (name in viewed) javax.swing.JCheckBox().apply { isOpaque = false; isSelected = true }
+                else javax.swing.JLabel(icons.CollaborationToolsIcons.Review.FileUnread)
+                add(slot, java.awt.BorderLayout.EAST)
             }
         }
+    }
+
+    fun `test a viewed-then-changed file gets a dash over its unread dot, white when it is the open file`() {
+        val changed = DefaultMutableTreeNode(change("/repo/src/Changed.java"))
+        val changedCurrent = DefaultMutableTreeNode(change("/repo/src/Current.java"))
+        val plain = DefaultMutableTreeNode(change("/repo/src/Plain.java"))
+        val viewed = DefaultMutableTreeNode(change("/repo/src/Viewed.java"))
+        val folder = DefaultMutableTreeNode(LocalFilePath("/repo/src", true)).apply { add(changed); add(changedCurrent); add(plain); add(viewed) }
+        val tree = treeWith(folder)
+        tree.cellRenderer = nativeLikeRenderer(viewed = setOf("Viewed.java"))
         tree.expandRow(0)
         val overlay = overlays(tree).single()
-        overlay.dismissed = PendingMarks.of("/repo", listOf("src/Changed.java"))
+        overlay.dismissed = PendingMarks.of("/repo", listOf("src/Changed.java", "src/Current.java"))
+        project.service<CurrentReviewFile>().update(LocalFilePath("/repo/src/Current.java", false))
 
         val image = render(tree)
 
-        val dash = ReviewChangeTrees.DISMISSED_DASH.rgb and 0xFFFFFF
-        fun dashXs(node: DefaultMutableTreeNode): List<Int> {
+        fun xsOf(node: DefaultMutableTreeNode, colour: Int): List<Int> {
             val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(node.path))!!
             return (row.x until minOf(row.x + row.width, image.width)).filter { x ->
-                (row.y until row.y + row.height).any { y -> (image.getRGB(x, y) and 0xFFFFFF) == dash }
+                (row.y until row.y + row.height).any { y -> (image.getRGB(x, y) and 0xFFFFFF) == colour }
             }
         }
-        fun rowHasDash(node: DefaultMutableTreeNode) = dashXs(node).isNotEmpty()
-        assertTrue("dash painted on the changed file's checkbox", rowHasDash(changed))
-        assertFalse("plain file keeps its checkbox", rowHasDash(plain))
+        val dash = ReviewChangeTrees.DISMISSED_DASH.rgb and 0xFFFFFF
+        val white = ReviewChangeTrees.DISMISSED_DASH_ON_CURRENT.rgb and 0xFFFFFF
+        assertTrue("dash painted over the unread dot of the changed file", xsOf(changed, dash).isNotEmpty())
         val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(changed.path))!!
-        assertTrue("the dash sits in the right-hand checkbox, not over the name", dashXs(changed).first() > row.x + minOf(row.width, image.width - row.x) / 2)
+        assertTrue("the dash sits in the right-hand slot, not over the name", xsOf(changed, dash).first() > row.x + minOf(row.width, image.width - row.x) / 2)
+        assertTrue("the open file's dash is white on the purple tint", xsOf(changedCurrent, white).size >= com.intellij.util.ui.JBUI.scale(8))
+        assertEmpty("plain file keeps its dot", xsOf(plain, dash))
+        assertEmpty("viewed file keeps its tick", xsOf(viewed, dash))
+    }
+
+    fun `test the slot is the viewed checkbox or the unread dot and nothing else`() {
+        assertTrue(ReviewChangeTrees.isStateSlot(javax.swing.JCheckBox()))
+        assertTrue(ReviewChangeTrees.isStateSlot(javax.swing.JLabel(icons.CollaborationToolsIcons.Review.FileUnread)))
+        assertFalse(ReviewChangeTrees.isStateSlot(javax.swing.JLabel(com.intellij.icons.AllIcons.General.Add)))
+        assertFalse(ReviewChangeTrees.isStateSlot(javax.swing.JLabel("text")))
     }
 
     fun `test uninstall cancels the pending-comments subscription`() {

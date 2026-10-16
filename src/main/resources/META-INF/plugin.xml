@@ -13,9 +13,9 @@
                 Authors can only comment.</li>
             <li>The changed file open in the editor is tinted purple in the pull request's file tree, so you can see where
                 you are and mark it as viewed; files with your not-yet-submitted review comments get an amber bar and a count;
-                a file you viewed before new commits arrived shows a dash in its checkbox.</li>
+                a file you viewed before new commits arrived gets a dash over its viewed-state slot.</li>
             <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
-                checked out); Alt+double-click or Shift+Enter opens the diff as before. Switchable in the tree's context menu.</li>
+                checked out); Alt+double-click opens the diff as before. Switchable in the tree's context menu.</li>
         </ul>
     ]]></description>
 

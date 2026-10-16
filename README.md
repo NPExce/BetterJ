@@ -35,13 +35,18 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    Theme keys: `BetterCodeReview.CurrentFile.background`, `BetterCodeReview.PendingComments.foreground`,
    `BetterCodeReview.PendingComments.text`.
 7. **See which viewed files changed again** - GitHub drops the "viewed" tick of a file when a later commit touches
-   it, and the bundled plugin then shows an empty checkbox, same as a file never looked at. The plugin paints a dash
-   into that checkbox instead: `[ ]` not viewed, `[v]` viewed, `[-]` viewed before, changed since. Theme key:
-   `BetterCodeReview.ViewedDismissed.dash`.
+   it, and the bundled plugin then shows the same unread dot as for a file never looked at (the checkbox itself only
+   appears under the mouse). The plugin paints a dash over that slot: dot = not viewed, tick = viewed, dash = viewed
+   before, changed since. Theme keys: `BetterCodeReview.ViewedDismissed.dash` (defaults to the theme's selected
+   checkbox colour) and `.dashOnCurrent` for the row of the open file.
 8. **Double-click opens the file** - double-click or Enter on a file in the pull request's tree opens the file
-   in the editor, which is what reading on the checked-out branch calls for; Alt+double-click and Shift+Enter
-   open the diff as before. When the pull request's branch is not the one checked out, the diff opens and a
-   balloon says why. *Double-Click Opens File* in the tree's context menu switches the behaviour off.
+   in the editor, which is what reading on the checked-out branch calls for; Alt+double-click and *Show Diff*
+   in the context menu open the diff as before (the platform ignores Enter with modifiers, so there is no
+   keyboard variant). When the pull request's branch is not the one checked out, the diff opens and a balloon
+   says why, once per tree. "Checked out" means the branch, not that the working copy equals the pull request's
+   head: unpulled commits or local edits can make line comments point elsewhere. In the tree of a single commit
+   the diff opens, since the local file is another version. *Double-Click Opens File* in the tree's context menu
+   switches the behaviour off.
 
 ## Requirements
 

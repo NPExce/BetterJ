@@ -2,11 +2,16 @@ package pl.adrros.bettercodereview.review.files
 
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vfs.VirtualFile
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.launch
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestReviewCommentState
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestReviewThread
@@ -45,9 +50,16 @@ class ReviewDataSource internal constructor(
         fun dismissedPaths(states: Map<String, GHPullRequestFileViewedState>): List<String> =
             states.filterValues { it == GHPullRequestFileViewedState.DISMISSED }.keys.sorted()
 
-        /** False only when the change list is pinned to one commit; IDE builds without the property count as latest. */
-        fun isOnLatest(changeList: GHPRChangeListViewModel): Boolean =
-            runCatching { changeList.javaClass.getMethod("isOnLatest").invoke(changeList) as? Boolean }.getOrNull() ?: true
+        /**
+         * False only for a change list pinned to one commit. 2026.1 and 2026.2 say so through `isOnLatest()`;
+         * 2026.3 splits the model into a cumulative and a per-commit class instead, told apart by name.
+         */
+        fun isOnLatest(changeList: GHPRChangeListViewModel): Boolean {
+            runCatching { changeList.javaClass.getMethod("isOnLatest").invoke(changeList) as? Boolean }.getOrNull()?.let { return it }
+            val types = generateSequence<Class<*>>(changeList.javaClass) { it.superclass }.flatMap { sequenceOf(it) + it.interfaces.asSequence() }
+            if (types.any { it.simpleName == "GHPRCumulativeChangeListViewModel" }) return true
+            return !changeList.javaClass.simpleName.contains("Commit")
+        }
 
         fun from(changeList: GHPRChangeListViewModel): ReviewDataSource? =
             try {
@@ -68,30 +80,43 @@ class ReviewDataSource internal constructor(
                 unavailable(e)
             }
 
-        /** The plugin's own state flow for viewed states is internal; the same loader and reload signal are public. */
-        private fun viewedStatesOf(provider: GHPRViewedStateDataProvider): Flow<Map<String, GHPullRequestFileViewedState>> = flow {
-            emitLoaded(provider)
-            provider.viewedStateNeedsReloadSignal.collect { emitLoaded(provider) }
-        }
-
-        private suspend fun kotlinx.coroutines.flow.FlowCollector<Map<String, GHPullRequestFileViewedState>>.emitLoaded(provider: GHPRViewedStateDataProvider) {
-            val loaded = try {
-                provider.loadViewedState()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                LOG.debug("Viewed state load failed, keeping the previous marks", e)
-                return
+        /**
+         * The plugin's own state flow for viewed states is internal; the same loader and reload signal are public.
+         * The signal is subscribed before the first load, so a reload landing in between is not lost; bursts conflate.
+         */
+        internal fun viewedStatesOf(provider: GHPRViewedStateDataProvider): Flow<Map<String, GHPullRequestFileViewedState>> {
+            var warned = false
+            return channelFlow {
+                launch(start = CoroutineStart.UNDISPATCHED) { provider.viewedStateNeedsReloadSignal.collect { send(Unit) } }
+                send(Unit)
+            }.conflate().transform {
+                val loaded = try {
+                    provider.loadViewedState()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The next reload signal (a tick, a refresh, new commits) retries; the first failure is worth a warning.
+                    if (warned) LOG.debug("Viewed state load failed again", e) else LOG.warn("Viewed state load failed; the viewed-then-changed marks wait for the next reload", e)
+                    warned = true
+                    return@transform
+                }
+                emit(loaded)
             }
-            emit(loaded)
         }
 
         private fun unavailable(e: Throwable): ReviewDataSource? {
             LOG.info("Tree marks unavailable: the change list model has no reachable data provider (${e.javaClass.simpleName}: ${e.message})")
+            LOG.debug(e)
             return null
         }
 
-        private fun privateField(target: Any, name: String): Any? =
-            target.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(target)
+        /** Looks the field up along the class hierarchy: 2026.3 declares it in a shared base class. */
+        private fun privateField(target: Any, name: String): Any? {
+            val field = generateSequence<Class<*>>(target.javaClass) { it.superclass }
+                .firstNotNullOfOrNull { type -> type.declaredFields.firstOrNull { it.name == name } }
+                ?: throw NoSuchFieldException("$name in ${target.javaClass.name}")
+            field.isAccessible = true
+            return field.get(target)
+        }
     }
 }
