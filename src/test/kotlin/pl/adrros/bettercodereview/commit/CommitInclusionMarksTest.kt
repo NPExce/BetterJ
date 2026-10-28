@@ -8,7 +8,10 @@ import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.openapi.vcs.history.VcsRevisionNumber
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.openapi.components.service
 import pl.adrros.bettercodereview.review.files.CheckboxClicks
+import pl.adrros.bettercodereview.review.files.CurrentFileMark
+import pl.adrros.bettercodereview.review.files.CurrentReviewFile
 import pl.adrros.bettercodereview.review.files.RowSlots
 import java.awt.Point
 import java.awt.image.BufferedImage
@@ -61,6 +64,7 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
     override fun tearDown() {
         try {
             treeOrNull?.let { CommitInclusionMarks.uninstall(it) }
+            project.service<CurrentReviewFile>().update(null as FilePath?)
             if (::defaultStampOf.isInitialized) CommitInclusionMarks.stampOf = defaultStampOf
         } finally {
             super.tearDown()
@@ -198,5 +202,61 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         assertEmpty(tree.components.filterIsInstance<CommitInclusionMarks.InclusionOverlay>())
         assertFalse(pressAndRelease())
         CommitInclusionMarks.install(tree)
+    }
+
+    private fun rgbAt(image: BufferedImage, x: Int, node: ChangesBrowserNode<*>): Int {
+        val row = tree.getPathBounds(TreePath(node.path))!!
+        return image.getRGB(x, row.y + row.height / 2) and 0xFFFFFF
+    }
+
+    fun `test the row of the file open in the editor gets the purple bar and tint, with or without checkboxes`() {
+        val plainB = rgbAt(render(), tree.width / 2, nodeB)
+        project.service<CurrentReviewFile>().update(b)
+        val bar = CurrentFileMark.HIGHLIGHT.rgb and 0xFFFFFF
+        for (checkboxes in listOf(true, false)) {
+            tree.setShowCheckboxes(checkboxes)
+            val image = render()
+            assertEquals("bar at the left edge, checkboxes $checkboxes", bar, rgbAt(image, 1, nodeB))
+            assertTrue("tint over the row, checkboxes $checkboxes", rgbAt(image, tree.width / 2, nodeB) != plainB)
+            assertTrue("other row has no bar, checkboxes $checkboxes", rgbAt(image, 1, nodeA) != bar)
+        }
+        assertEquals(tree.getPathBounds(TreePath(nodeB.path))!!.y, overlay.markedRow!!.y)
+        assertFalse("not showing, so no pulse", overlay.isPulsing)
+    }
+
+    fun `test the open file keeps its dash on top of the mark`() {
+        tickByClick(nodeB, changeB)
+        stamps[b] = CommitInclusionMarks.Stamp(-1, 2, 100)
+        project.service<CurrentReviewFile>().update(b)
+        assertTrue(dashPixels(render(), nodeB) > 0)
+    }
+
+    fun `test nothing is marked without a matching file`() {
+        project.service<CurrentReviewFile>().update(LocalFilePath("/repo/src/Other.java", false))
+        render()
+        assertNull(overlay.markedRow)
+        project.service<CurrentReviewFile>().update(null as FilePath?)
+        render()
+        assertNull(overlay.markedRow)
+    }
+
+    fun `test a folder leaf is never the open file`() {
+        val folder = LocalFilePath("/repo/src/empty", true)
+        val root = ChangesBrowserNode.createRoot()
+        root.add(ChangesBrowserNode.createFilePath(folder))
+        tree.show(DefaultTreeModel(root))
+        project.service<CurrentReviewFile>().update(folder)
+        render()
+        assertNull(overlay.markedRow)
+    }
+
+    fun `test after uninstall the tree is no longer marked`() {
+        CommitInclusionMarks.uninstall(tree)
+        project.service<CurrentReviewFile>().update(b)
+        render()
+        assertEmpty(tree.components.filterIsInstance<CommitInclusionMarks.InclusionOverlay>())
+        val reinstalled = CommitInclusionMarks.install(tree)
+        render()
+        assertNotNull("a fresh install picks the open file up again", reinstalled.markedRow)
     }
 }

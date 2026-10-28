@@ -6,10 +6,8 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vcs.FilePath
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
-import com.intellij.ui.ExperimentalUI
 import com.intellij.ui.JBColor
 import com.intellij.ui.paint.RectanglePainter2D
-import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.util.ui.JBUI
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
@@ -36,10 +34,6 @@ import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.swing.JComponent
 import javax.swing.JTree
-import javax.swing.Timer
-import kotlin.math.PI
-import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
  * Marks the file open in the editor inside the pull request's change tree, so the reader always knows which
@@ -52,15 +46,10 @@ private val LOG = logger<ReviewChangeTrees>()
 object ReviewChangeTrees {
     const val INSTALLED = "BetterCodeReview.currentFileHighlight"
     private const val REVIEW_TREE_FACTORY = "com.intellij.collaboration.ui.codereview.changes.CodeReviewChangeListComponentFactory"
-    private const val BAR_WIDTH = 4
-    private const val TINT_ALPHA_MIN = 90
-    private const val TINT_ALPHA_MAX = 160
-    private const val PULSE_PERIOD_MS = 1600
-    private const val PULSE_TICK_MS = 40
+    private const val BAR_WIDTH = CurrentFileMark.BAR_WIDTH
     private const val FOLDER_BAR_ALPHA = 128
 
-    /** Saturated purple, overridable by themes; the tint is drawn with alpha, so text stays readable underneath. */
-    val HIGHLIGHT: Color = JBColor.namedColor("BetterCodeReview.CurrentFile.background", JBColor(Color(0x7C, 0x3A, 0xED), Color(0xA7, 0x8B, 0xFA)))
+    val HIGHLIGHT: Color get() = CurrentFileMark.HIGHLIGHT
 
     /** Amber for pending comments: distinct from the purple mark and from the platform's blue selection. */
     val PENDING: Color = JBColor.namedColor("BetterCodeReview.PendingComments.foreground", JBColor(Color(0xE0, 0x8A, 0x00), Color(0xFB, 0xBF, 0x24)))
@@ -255,7 +244,7 @@ object ReviewChangeTrees {
         }
 
         override fun removeNotify() {
-            pulse.stop()
+            mark.stop()
             detachFlags()
             super.removeNotify()
         }
@@ -309,17 +298,12 @@ object ReviewChangeTrees {
             }
         }
 
-        private var phase = 0
-        private var lastMark: Rectangle? = null
-        private val pulse = Timer(PULSE_TICK_MS) {
-            phase = (phase + PULSE_TICK_MS) % PULSE_PERIOD_MS
-            lastMark?.let { repaint(it) } ?: repaint()
-        }
+        private val mark = CurrentFileMark(this)
 
-        val isPulsing: Boolean get() = pulse.isRunning
+        val isPulsing: Boolean get() = mark.isPulsing
 
         /** The current file's row as of the last paint, for tests. */
-        internal val markedRow: Rectangle? get() = lastMark
+        internal val markedRow: Rectangle? get() = mark.markedRow
 
         init {
             isOpaque = false
@@ -328,13 +312,7 @@ object ReviewChangeTrees {
             fitTree()
         }
 
-        /** Alpha of the tint at this moment: a sine wave between the two limits. */
-        private fun tintAlpha(): Int {
-            val wave = (sin(2 * PI * phase / PULSE_PERIOD_MS) + 1) / 2
-            return (TINT_ALPHA_MIN + wave * (TINT_ALPHA_MAX - TINT_ALPHA_MIN)).roundToInt()
-        }
-
-        fun stopPulsing() = pulse.stop()
+        fun stopPulsing() = mark.stop()
 
         private fun fitTree() {
             bounds = Rectangle(0, 0, tree.width, tree.height)
@@ -357,14 +335,13 @@ object ReviewChangeTrees {
                 if (isCurrent) marked = rowRect // remembered even outside the clip, so a partial repaint keeps the pulse alive
                 if (clip != null && !clip.intersects(rowRect)) continue
                 val pending = pendingCountFor(path, nodePath)
-                if (isCurrent) paintMark(g, bounds, visible)
+                if (isCurrent) mark.paint(g, bounds, visible)
                 val leaf = tree.model.isLeaf(path.lastPathComponent)
                 if (pending > 0) paintPending(g, bounds, visible, pending, isCurrent, leaf)
                 val flagged = ViewedStateCycle.isEnabled && relativePath(nodePath)?.let(::isFlagged) == true
                 if (leaf && (dismissed.countFor(nodePath) > 0 || flagged)) paintDismissedDash(g, path, row, isCurrent)
             }
-            lastMark = marked
-            if (marked != null && isShowing) pulse.start() else pulse.stop()
+            mark.painted(marked)
         }
 
         /** Files count their own comments; a collapsed folder sums the files the tree shows beneath it, an expanded one shows nothing. */
@@ -435,23 +412,6 @@ object ReviewChangeTrees {
             val first = tree.getClosestRowForLocation(0, visible.y).coerceAtLeast(0)
             val last = tree.getClosestRowForLocation(0, visible.y + visible.height - 1).coerceAtLeast(first)
             return first..last
-        }
-
-        private fun paintMark(g: Graphics, row: Rectangle, visible: Rectangle) {
-            val g2 = g.create() as Graphics2D
-            try {
-                val newUi = ExperimentalUI.isNewUI()
-                val inset = if (newUi) JBUI.scale(DefaultTreeUI.HORIZONTAL_SELECTION_OFFSET) else 0
-                val arc = if (newUi) JBUI.CurrentTheme.Tree.ARC.get().toDouble() else 0.0
-                g2.color = Color(HIGHLIGHT.red, HIGHLIGHT.green, HIGHLIGHT.blue, tintAlpha())
-                RectanglePainter2D.FILL.paint(
-                    g2, (visible.x + inset).toDouble(), row.y.toDouble(), (visible.width - 2 * inset).toDouble(), row.height.toDouble(), arc,
-                )
-                g2.color = HIGHLIGHT
-                g2.fillRect(visible.x, row.y, JBUI.scale(BAR_WIDTH), row.height)
-            } finally {
-                g2.dispose()
-            }
         }
     }
 }

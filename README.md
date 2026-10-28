@@ -26,7 +26,8 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    purple tint and a bar at the left edge in the pull request's file tree, on top of selection, hover and file
    colours. It follows
    the editor file matched by path, so it works when the real file is open (review on the checked-out branch);
-   a diff tab does not match. Renamed files match their new path, deleted files never do.
+   a diff tab does not match. Renamed files match their new path, deleted files never do. The Commit tool window's
+   tree (and Local Changes) marks the open file the same way, with or without its checkboxes.
 6. **See where your unsent comments are** - files holding comments of your pending (not yet submitted) review,
    new threads and replies alike, get an amber bar at the left edge and a round badge with the count (the badge
    appears when the indentation leaves room for it). A collapsed folder gets a lighter bar; expanded folders show

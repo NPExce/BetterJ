@@ -16,7 +16,7 @@
                 a file you viewed before new commits arrived gets a dash over its viewed-state slot. Clicking a ticked file
                 cycles tick, dash ("read it again"), empty.</li>
             <li>In the Commit tool window a file you ticked that changed since (edited by you or written on disk by a tool)
-                shows a dash in its checkbox, and clicking a ticked file first shows the dash, then unticks it; the file stays in
+                shows a dash in its checkbox, the file open in the editor gets the same purple mark as in the pull request's tree, and clicking a ticked file first shows the dash, then unticks it; the file stays in
                 the commit while dashed. Both click cycles can be switched off in the trees' context menus.</li>
             <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
                 checked out); Alt+double-click opens the diff as before. Switchable in the tree's context menu.</li>

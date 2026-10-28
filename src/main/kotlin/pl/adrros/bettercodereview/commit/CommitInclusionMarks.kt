@@ -22,7 +22,10 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.ui.ThreeStateCheckBox
 import com.intellij.util.ui.tree.TreeUtil
 import pl.adrros.bettercodereview.review.DecorationOwner
+import com.intellij.openapi.components.service
 import pl.adrros.bettercodereview.review.files.CheckboxClicks
+import pl.adrros.bettercodereview.review.files.CurrentFileMark
+import pl.adrros.bettercodereview.review.files.CurrentReviewFile
 import pl.adrros.bettercodereview.review.files.RowSlots
 import java.awt.Graphics
 import java.awt.Point
@@ -42,6 +45,7 @@ import javax.swing.tree.TreePath
  * next click unticks it as usual, and ticking it again takes the file's current content as the new baseline.
  * Only files ticked by a click get a baseline: files the IDE ticks on its own, or that were ticked before the
  * plugin saw the tree, would otherwise show the dash on every keystroke.
+ * The file open in the editor gets the same pulsing purple mark as in the pull request's tree.
  */
 object CommitInclusionMarks {
     const val INSTALLED = "BetterCodeReview.commitMarks"
@@ -59,13 +63,14 @@ object CommitInclusionMarks {
         install(tree)
     }
 
-    fun install(tree: ChangesTree): InclusionOverlay {
+    fun install(tree: ChangesTree, currentFile: CurrentReviewFile = tree.project.service()): InclusionOverlay {
         (tree.getClientProperty(INSTALLED) as? JComponent)?.let { if (DecorationOwner.owns(it)) uninstall(tree) else tree.remove(it) }
-        val overlay = InclusionOverlay(tree)
+        val overlay = InclusionOverlay(tree, currentFile)
         tree.putClientProperty(INSTALLED, overlay)
         tree.add(overlay)
         tree.addComponentListener(overlay.resizeListener)
         synchronized(installed) { installed.add(tree) }
+        currentFile.track(tree)
         CheckboxClicks.register(tree) { point -> overlay.decide(point) }
         tree.repaint()
         return overlay
@@ -79,6 +84,7 @@ object CommitInclusionMarks {
             (overlay as? InclusionOverlay)?.let {
                 tree.removeComponentListener(it.resizeListener)
                 it.stopListening()
+                it.currentFile.untrack(tree)
             }
             tree.remove(overlay)
         }
@@ -116,7 +122,14 @@ object CommitInclusionMarks {
         else -> null
     }
 
-    class InclusionOverlay(private val tree: ChangesTree) : JComponent() {
+    class InclusionOverlay(private val tree: ChangesTree, val currentFile: CurrentReviewFile) : JComponent() {
+        private val mark = CurrentFileMark(this)
+
+        val isPulsing: Boolean get() = mark.isPulsing
+
+        /** The current file's row as of the last paint, for tests. */
+        internal val markedRow: Rectangle? get() = mark.markedRow
+
         /** Content baseline of every file ticked by a click, taken right after the tick. */
         private val baselines = HashMap<FilePath, Stamp>()
 
@@ -165,6 +178,7 @@ object CommitInclusionMarks {
         }
 
         fun stopListening() {
+            mark.stop()
             listening?.let(Disposer::dispose)
             listening = null
         }
@@ -205,24 +219,38 @@ object CommitInclusionMarks {
 
         fun isFlagged(path: FilePath): Boolean = path in flagged
 
+        /** The current-file mark shows with or without checkboxes; the dashes only while the Commit panel shows checkboxes. */
         override fun paintComponent(g: Graphics) {
-            if (!active) return
-            syncInclusion()
-            val visible = tree.visibleRect
-            val clip = g.clipBounds
-            val first = tree.getClosestRowForLocation(visible.x, visible.y).coerceAtLeast(0)
-            val last = tree.getClosestRowForLocation(visible.x, visible.y + visible.height - 1)
-            for (row in first..last) {
-                val path = tree.getPathForRow(row) ?: continue
-                val bounds = tree.getRowBounds(row) ?: continue
-                if (clip != null && !clip.intersects(Rectangle(visible.x, bounds.y, visible.width, bounds.height))) continue
-                if (!tree.model.isLeaf(path.lastPathComponent)) continue
-                val userObject = TreeUtil.getLastUserObject(path) ?: continue
-                val filePath = pathOf(userObject) ?: continue
-                if (!isTicked(userObject) || !isMarked(filePath)) continue
-                val slot = RowSlots.stateSlot(tree, path, row) ?: continue
-                RowSlots.paintDash(g, tree, row, slot, isCurrent = false)
+            val dashes = active
+            val current = currentFile.path
+            if (!dashes && current == null) {
+                mark.painted(null)
+                return
             }
+            val clip = g.clipBounds
+            if (dashes && !mark.isPulseRepaint(clip)) syncInclusion()
+            var marked: Rectangle? = null
+            val visible = tree.visibleRect
+            if (tree.rowCount > 0 && !visible.isEmpty) {
+                val first = tree.getClosestRowForLocation(visible.x, visible.y).coerceAtLeast(0)
+                val last = tree.getClosestRowForLocation(visible.x, visible.y + visible.height - 1)
+                for (row in first..last) {
+                    val path = tree.getPathForRow(row) ?: continue
+                    val bounds = tree.getRowBounds(row) ?: continue
+                    if (!tree.model.isLeaf(path.lastPathComponent)) continue
+                    val userObject = TreeUtil.getLastUserObject(path) ?: continue
+                    val filePath = pathOf(userObject) ?: continue
+                    val rowRect = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
+                    val isCurrent = current != null && !filePath.isDirectory && filePath == current
+                    if (isCurrent) marked = rowRect // remembered even outside the clip, so a partial repaint keeps the pulse alive
+                    if (clip != null && !clip.intersects(rowRect)) continue
+                    if (isCurrent) mark.paint(g, bounds, visible)
+                    if (!dashes || !isTicked(userObject) || !isMarked(filePath)) continue
+                    val slot = RowSlots.stateSlot(tree, path, row) ?: continue
+                    RowSlots.paintDash(g, tree, row, slot, isCurrent)
+                }
+            }
+            mark.painted(marked)
         }
 
         /**
