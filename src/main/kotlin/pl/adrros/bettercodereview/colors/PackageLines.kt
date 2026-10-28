@@ -30,6 +30,9 @@ object PackageLines {
     /** The package declaration sits near the top, after at most a licence header. */
     private const val SCAN_CHARS = 20_000
 
+    /** Languages that declare their package on a line of its own; a README's "package manager" line stays plain. */
+    private val EXTENSIONS = setOf("java", "kt", "kts", "scala", "groovy", "go")
+
     /** Above the caret row, so the tint stays when the caret is on that line. */
     private const val LAYER = HighlighterLayer.CARET_ROW + 1
 
@@ -55,7 +58,7 @@ object PackageLines {
     internal fun tint(editor: Editor) {
         if (editor.isDisposed) return
         val project = editor.project ?: return
-        val file = FileDocumentManager.getInstance().getFile(editor.document)
+        val file = FileDocumentManager.getInstance().getFile(editor.document)?.takeIf { it.extension?.lowercase() in EXTENSIONS }
         val color = file?.let { colorFor(project, it) }
         val line = color?.let { packageLine(editor.document) }
         val existing = editor.getUserData(KEY)

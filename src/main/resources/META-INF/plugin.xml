@@ -17,7 +17,7 @@
                 cycles tick, dash ("read it again"), empty.</li>
             <li>In the Commit tool window a file you ticked that changed since (edited by you or written on disk by a tool)
                 shows a dash in its checkbox, the file open in the editor gets the same purple mark as in the pull request's tree, and clicking a ticked file first shows the dash, then unticks it; the file stays in
-                the commit while dashed. Both click cycles can be switched off in the trees' context menus.</li>
+                the commit while dashed. Next to the number of changed files the change list shows the lines added and removed. Both click cycles can be switched off in the trees' context menus.</li>
             <li>Colour folders and files of the project (Package Color in the project tree's and editor tab's context menus):
                 the colour shows in the project tree, the change trees and the editor tabs, and as the background of the
                 package line of files inside. The palette is yours to edit in Settings | Tools | Package Colors; settings
@@ -44,8 +44,11 @@
         <notificationGroup id="BetterCodeReview" displayType="BALLOON"/>
 
         <postStartupActivity implementation="pl.adrros.bettercodereview.review.ReviewUiDecorationInstaller"/>
+        <postStartupActivity implementation="pl.adrros.bettercodereview.colors.OtherColorPluginCheck"/>
 
         <editorFactoryListener implementation="pl.adrros.bettercodereview.review.ReviewCommentEditorListener"/>
+
+        <vcs.changeListDecorator implementation="pl.adrros.bettercodereview.commit.ChangeLineStats$Decorator"/>
 
         <editorTabColorProvider implementation="pl.adrros.bettercodereview.colors.PackageColorProvider"/>
         <editorFactoryListener implementation="pl.adrros.bettercodereview.colors.PackageLines$EditorListener"/>
@@ -117,8 +120,8 @@
         <group id="BetterCodeReview.PackageColor"
                class="pl.adrros.bettercodereview.colors.PackageColorActionGroup"
                popup="true" icon="AllIcons.Actions.Colors">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="popup@ExpandableBookmarkContextMenu"/>
-            <add-to-group group-id="EditorTabPopupMenuEx" anchor="after" relative-to-action="popup@ExpandableBookmarkContextMenu"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="ProjectViewPopupMenuRefactoringGroup"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="after" relative-to-action="popup@ExpandableBookmarkContextMenu"/>
         </group>
 
         <action id="BetterCodeReview.InsertEmoji"

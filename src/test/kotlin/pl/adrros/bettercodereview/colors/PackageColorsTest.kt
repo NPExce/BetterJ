@@ -139,4 +139,59 @@ class PackageColorsTest : BasePlatformTestCase() {
     fun `test the project service starts with a palette`() {
         assertFalse(project.service<PackageColors>().colors.isEmpty())
     }
+
+    fun `test the state survives a round trip through XML`() {
+        val colors = colors()
+        colors.assign(base, listOf(base, "$base/src/a"), colors.colors[2].id)
+        colors.update(colors.colors.map { if (it.id == 1) it.copy(color = Color(1, 2, 3, 40)) else it }, packageLine = false)
+        val element = com.intellij.util.xmlb.XmlSerializer.serialize(colors.getState())
+        val restored = PackageColors(project).apply { loadState(com.intellij.util.xmlb.XmlSerializer.deserialize(element, PackageColors.ColorsState::class.java)) }
+        assertEquals(colors.colors, restored.colors)
+        assertFalse(restored.tintsPackageLine)
+        assertEquals(colors.colors[2].color, restored.colorOf(base, "$base/src/a/B.java"))
+        assertEquals("the base directory itself", colors.colors[2].color, restored.colorOf(base, "$base/README.md"))
+    }
+
+    fun `test the default palette is not written until it is edited`() {
+        val colors = PackageColors(project).apply { noStateLoaded() }
+        assertEquals(8, colors.colors.size)
+        assertEmpty(colors.getState().colors)
+        colors.assign(base, listOf("$base/src"), colors.colors[0].id)
+        assertEmpty("colouring a folder does not store the palette", colors.getState().colors)
+        assertEquals(colors.colors[0].color, colors.colorOf(base, "$base/src/A.java"))
+    }
+
+    fun `test a colour disabled in the other plugin comes over with none of its files`() {
+        val file = Files.createTempDirectory("bcr-colors").resolve("highlightedFiles.xml")
+        Files.writeString(
+            file,
+            """
+            <project version="4">
+              <component name="ProjectTreeColorHighlighter">
+                <files>
+                  <node color="1" path="${'$'}PROJECT_DIR${'$'}/a" />
+                  <node color="2" path="${'$'}PROJECT_DIR${'$'}/b" />
+                </files>
+                <colors>
+                  <color id="1" value="#112233" name="On" enabled="true" />
+                  <color id="2" value="#445566" name="Off" enabled="false" />
+                </colors>
+              </component>
+            </project>
+            """.trimIndent(),
+        )
+        val state = PackageColors.importHighlightedFiles(file)!!
+        assertEquals(listOf(1), state.colors.map { it.id })
+        assertEquals(listOf("a"), state.files.map { it.path })
+    }
+
+    fun `test only files of languages with a package line are tinted`() {
+        PackageLines.colorFor = { _, _ -> Color.GREEN }
+        myFixture.configureByText("README.md", "package manager notes\n")
+        PackageLines.tint(myFixture.editor)
+        assertNull(PackageLines.highlighterOf(myFixture.editor))
+        myFixture.configureByText("Main.go", "package main\n")
+        PackageLines.tint(myFixture.editor)
+        assertNotNull(PackageLines.highlighterOf(myFixture.editor))
+    }
 }

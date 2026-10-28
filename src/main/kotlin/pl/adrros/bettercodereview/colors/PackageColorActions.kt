@@ -14,7 +14,6 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.ui.ColorIcon
-import com.intellij.util.ui.JBUI
 import pl.adrros.bettercodereview.BetterCodeReviewBundle
 
 /** "Package Color" in the project tree's and the editor tab's context menus: one entry per palette colour, then clear and edit. */
@@ -41,7 +40,7 @@ class PackageColorActionGroup : ActionGroup(), DumbAware {
     }
 }
 
-private class AssignColorAction(private val color: PackageColors.PaletteColor) : DumbAwareAction(color.name, null, ColorIcon(JBUI.scale(12), color.color)) {
+private class AssignColorAction(private val color: PackageColors.PaletteColor) : DumbAwareAction(color.name, null, ColorIcon(12, color.color)) {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun actionPerformed(e: AnActionEvent) {

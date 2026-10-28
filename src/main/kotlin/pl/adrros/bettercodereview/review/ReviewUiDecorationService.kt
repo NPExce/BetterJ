@@ -95,6 +95,7 @@ class ReviewUiDecorationService : Disposable {
             UIUtil.uiTraverser(window).forEach(::decorate)
         }
         EditorFactory.getInstance().allEditors.forEach { editor -> guarded { ReviewCommentEditorListener.decorate(editor) } }
+        com.intellij.openapi.project.ProjectManager.getInstance().openProjects.forEach { project -> guarded { pl.adrros.bettercodereview.colors.PackageLines.refreshAll(project) } }
     }
 
     /**

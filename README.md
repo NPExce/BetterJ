@@ -65,6 +65,9 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    with only some of its lines included keeps the platform's own indeterminate box and is left alone. The cycle acts
    on plain left clicks; modifier-clicks and Space go straight to the platform. *Dash Changed or Flagged Files* in
    the tree's context menu switches the feature off.
+   Next to the number of files, each change list shows the lines added and removed (`+120 −34`), counted like the
+   diff viewer counts them (a changed line is one of each), unsaved edits included. Binary files and files over two
+   million characters count as zero. Theme keys: `BetterCodeReview.LineStats.added`, `.deleted`.
 
 10. **Package colours** - right-click a folder or file in the project tree (or an editor tab) and pick a colour under
    *Package Color*. The colour shows as the background in the project tree, in the change trees (Commit, pull request)

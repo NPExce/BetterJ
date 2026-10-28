@@ -71,9 +71,10 @@ class PackageColors(private val project: Project) : PersistentStateComponent<Pac
         fun colorsChanged(project: Project)
     }
 
-    private var current = ColorsState()
-    private var byPath: Map<String, Int> = emptyMap()
-    private var palette: Map<Int, PaletteColor> = emptyMap()
+    // Read from background threads (the project tree paints asynchronously); replaced whole, never mutated in place.
+    @Volatile private var current = ColorsState()
+    @Volatile private var byPath: Map<String, Int> = emptyMap()
+    @Volatile private var palette: List<PaletteColor> = emptyList()
 
     override fun getState(): ColorsState = current
 
@@ -82,19 +83,20 @@ class PackageColors(private val project: Project) : PersistentStateComponent<Pac
         reindex()
     }
 
-    /** Nothing stored yet: take over the other plugin's settings, or start from the default palette. */
+    /** Nothing stored yet: take over the other plugin's settings. Without them nothing is written until the developer colours something. */
     override fun noStateLoaded() {
-        current = importHighlightedFiles(project) ?: ColorsState().apply { colors = defaultPalette() }
+        current = importHighlightedFiles(project) ?: ColorsState()
         reindex()
     }
 
+    /** An empty stored palette means the default one for the current theme, kept in memory only. */
     private fun reindex() {
-        if (current.colors.isEmpty()) current.colors = defaultPalette()
-        palette = current.colors.mapNotNull { entry -> parseColor(entry.value)?.let { PaletteColor(entry.id, entry.name, it) } }.associateBy { it.id }
+        val entries = current.colors.ifEmpty { defaultPalette() }
+        palette = entries.mapNotNull { entry -> parseColor(entry.value)?.let { PaletteColor(entry.id, entry.name, it) } }
         byPath = current.files.associate { it.path to it.color }
     }
 
-    val colors: List<PaletteColor> get() = current.colors.mapNotNull { palette[it.id] }
+    val colors: List<PaletteColor> get() = palette
 
     val tintsPackageLine: Boolean get() = current.packageLine
 
@@ -105,7 +107,7 @@ class PackageColors(private val project: Project) : PersistentStateComponent<Pac
         if (byPath.isEmpty()) return null
         var relative = relativePath(base, path) ?: return null
         while (true) {
-            byPath[relative]?.let { id -> return palette[id]?.color }
+            byPath[relative]?.let { id -> return palette.firstOrNull { it.id == id }?.color }
             if (relative.isEmpty()) return null
             relative = relative.substringBeforeLast('/', "")
         }
@@ -123,18 +125,26 @@ class PackageColors(private val project: Project) : PersistentStateComponent<Pac
     fun assign(base: String, absolutePaths: Collection<String>, colorId: Int?) {
         val paths = absolutePaths.mapNotNull { relativePath(base, it) }.toSet()
         if (paths.isEmpty()) return
-        current.files.removeAll { it.path in paths }
-        if (colorId != null) paths.sorted().forEach { current.files.add(FileEntry(it, colorId)) }
+        val files = current.files.filterNot { it.path in paths } + (colorId?.let { id -> paths.sorted().map { FileEntry(it, id) } } ?: emptyList())
+        current = copyOf(current).apply { this.files = files.toMutableList() }
         reindex()
         fireChanged()
     }
 
     /** Replaces the palette and the package-line switch, as edited in the settings. */
     fun update(colors: List<PaletteColor>, packageLine: Boolean) {
-        current.colors = colors.map { PaletteEntry(it.id, it.name, formatColor(it.color)) }.toMutableList()
-        current.packageLine = packageLine
+        current = copyOf(current).apply {
+            this.colors = colors.map { PaletteEntry(it.id, it.name, formatColor(it.color)) }.toMutableList()
+            this.packageLine = packageLine
+        }
         reindex()
         fireChanged()
+    }
+
+    private fun copyOf(state: ColorsState) = ColorsState().apply {
+        colors = state.colors.toMutableList()
+        files = state.files.toMutableList()
+        packageLine = state.packageLine
     }
 
     private fun fireChanged() {
@@ -193,13 +203,16 @@ class PackageColors(private val project: Project) : PersistentStateComponent<Pac
             if (!Files.isRegularFile(file)) return null
             return try {
                 val component = JDOMUtil.load(file).getChildren("component").firstOrNull { it.getAttributeValue("name") == OTHER_PLUGIN_COMPONENT } ?: return null
+                // The other plugin does not paint a colour it marks as disabled, so neither the colour nor its files come over.
                 val colors = component.getChild("colors")?.getChildren("color").orEmpty().mapNotNull { element ->
+                    if (element.getAttributeValue("enabled") == "false") return@mapNotNull null
                     val id = element.getAttributeValue("id")?.toIntOrNull() ?: return@mapNotNull null
                     val value = element.getAttributeValue("value")?.takeIf { parseColor(it) != null } ?: return@mapNotNull null
                     PaletteEntry(id, element.getAttributeValue("name") ?: "Color $id", value)
                 }
+                val ids = colors.map { it.id }.toSet()
                 val files = component.getChild("files")?.getChildren("node").orEmpty().mapNotNull { element ->
-                    val id = element.getAttributeValue("color")?.toIntOrNull() ?: return@mapNotNull null
+                    val id = element.getAttributeValue("color")?.toIntOrNull()?.takeIf { it in ids } ?: return@mapNotNull null
                     val path = element.getAttributeValue("path") ?: return@mapNotNull null
                     if (path != PROJECT_DIR && !path.startsWith("$PROJECT_DIR/")) return@mapNotNull null
                     FileEntry(path.removePrefix(PROJECT_DIR).removePrefix("/"), id)
