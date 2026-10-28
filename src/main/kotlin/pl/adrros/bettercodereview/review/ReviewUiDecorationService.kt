@@ -109,6 +109,7 @@ class ReviewUiDecorationService : Disposable {
         listener = null
         guarded { ReviewChangeTrees.uninstallAll() }
         guarded { CommitInclusionMarks.uninstallAll() }
+        guarded { pl.adrros.bettercodereview.colors.PackageLines.removeAll() }
         guarded {
             for (window in Window.getWindows()) {
                 for (component in UIUtil.uiTraverser(window).filter(JComponent::class.java)) {

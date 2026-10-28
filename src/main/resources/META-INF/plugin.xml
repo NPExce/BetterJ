@@ -18,6 +18,10 @@
             <li>In the Commit tool window a file you ticked that changed since (edited by you or written on disk by a tool)
                 shows a dash in its checkbox, the file open in the editor gets the same purple mark as in the pull request's tree, and clicking a ticked file first shows the dash, then unticks it; the file stays in
                 the commit while dashed. Both click cycles can be switched off in the trees' context menus.</li>
+            <li>Colour folders and files of the project (Package Color in the project tree's and editor tab's context menus):
+                the colour shows in the project tree, the change trees and the editor tabs, and as the background of the
+                package line of files inside. The palette is yours to edit in Settings | Tools | Package Colors; settings
+                of the ProjectTree Color Highlighter plugin (.idea/highlightedFiles.xml) are imported on first use.</li>
             <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
                 checked out); Alt+double-click opens the diff as before. Switchable in the tree's context menu.</li>
         </ul>
@@ -32,6 +36,8 @@
     <projectListeners>
         <listener class="pl.adrros.bettercodereview.review.files.CurrentReviewFile$EditorListener"
                   topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+        <listener class="pl.adrros.bettercodereview.colors.PackageColorsRefresher"
+                  topic="pl.adrros.bettercodereview.colors.PackageColors$Listener"/>
     </projectListeners>
 
     <extensions defaultExtensionNs="com.intellij">
@@ -40,6 +46,13 @@
         <postStartupActivity implementation="pl.adrros.bettercodereview.review.ReviewUiDecorationInstaller"/>
 
         <editorFactoryListener implementation="pl.adrros.bettercodereview.review.ReviewCommentEditorListener"/>
+
+        <editorTabColorProvider implementation="pl.adrros.bettercodereview.colors.PackageColorProvider"/>
+        <editorFactoryListener implementation="pl.adrros.bettercodereview.colors.PackageLines$EditorListener"/>
+        <editorFactoryDocumentListener implementation="pl.adrros.bettercodereview.colors.PackageLines$EditListener"/>
+        <projectConfigurable parentId="tools" id="BetterCodeReview.PackageColors"
+                             instance="pl.adrros.bettercodereview.colors.PackageColorsConfigurable"
+                             key="packageColors.settings" bundle="messages.BetterCodeReviewBundle"/>
 
         <actionPromoter implementation="pl.adrros.bettercodereview.review.ReviewActionPromoter"/>
 
@@ -100,6 +113,13 @@
                 class="pl.adrros.bettercodereview.commit.CommitInclusionMarks$ToggleMarksAction">
             <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
         </action>
+
+        <group id="BetterCodeReview.PackageColor"
+               class="pl.adrros.bettercodereview.colors.PackageColorActionGroup"
+               popup="true" icon="AllIcons.Actions.Colors">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="popup@ExpandableBookmarkContextMenu"/>
+            <add-to-group group-id="EditorTabPopupMenuEx" anchor="after" relative-to-action="popup@ExpandableBookmarkContextMenu"/>
+        </group>
 
         <action id="BetterCodeReview.InsertEmoji"
                 class="pl.adrros.bettercodereview.emoji.InsertEmojiAction">

@@ -66,6 +66,16 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    on plain left clicks; modifier-clicks and Space go straight to the platform. *Dash Changed or Flagged Files* in
    the tree's context menu switches the feature off.
 
+10. **Package colours** - right-click a folder or file in the project tree (or an editor tab) and pick a colour under
+   *Package Color*. The colour shows as the background in the project tree, in the change trees (Commit, pull request)
+   and on the editor tabs, for the folder and everything inside it; a nested folder may get its own colour. Files in a
+   coloured package also get the colour behind their `package` line in the editor (Java, Kotlin, Scala, Groovy, Go), so
+   the editor tells which part of the project you are in. The palette is yours: *Settings | Tools | Package Colors*
+   edits each colour's name and value (with transparency) and switches the package line off. Settings live in
+   `.idea/betterCodeReviewColors.xml`. On first use the plugin imports the assignments and the palette of the
+   *ProjectTree Color Highlighter* plugin from `.idea/highlightedFiles.xml`; uninstall that plugin afterwards, since
+   with both installed its colours win.
+
 ## Requirements
 
 - IntelliJ IDEA 2026.1 to 2026.3 (builds 261 to 263) with the bundled *GitHub* and *Git* plugins enabled.
