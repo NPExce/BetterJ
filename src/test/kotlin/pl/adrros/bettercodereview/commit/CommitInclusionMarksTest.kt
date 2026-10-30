@@ -26,6 +26,8 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
 
     private val stamps = HashMap<FilePath, CommitInclusionMarks.Stamp>()
     private lateinit var defaultStampOf: (FilePath) -> CommitInclusionMarks.Stamp?
+    private val contents = HashMap<FilePath, String>()
+    private lateinit var defaultContentOf: (FilePath) -> CharSequence?
     private var treeOrNull: TestTree? = null
     private val a = LocalFilePath("/repo/src/A.java", false)
     private val b = LocalFilePath("/repo/src/B.java", false)
@@ -44,6 +46,8 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         super.setUp()
         defaultStampOf = CommitInclusionMarks.stampOf
         CommitInclusionMarks.stampOf = { stamps[it] }
+        defaultContentOf = CommitInclusionMarks.contentOf
+        CommitInclusionMarks.contentOf = { contents[it] }
         stamps[a] = CommitInclusionMarks.Stamp(-1, 1, 100)
         stamps[b] = CommitInclusionMarks.Stamp(-1, 1, 100)
         changeA = Change(null, revision(a))
@@ -66,6 +70,7 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
             treeOrNull?.let { CommitInclusionMarks.uninstall(it) }
             project.service<CurrentReviewFile>().update(null as FilePath?)
             if (::defaultStampOf.isInitialized) CommitInclusionMarks.stampOf = defaultStampOf
+            if (::defaultContentOf.isInitialized) CommitInclusionMarks.contentOf = defaultContentOf
         } finally {
             super.tearDown()
         }
@@ -258,5 +263,190 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         val reinstalled = CommitInclusionMarks.install(tree)
         render()
         assertNotNull("a fresh install picks the open file up again", reinstalled.markedRow)
+    }
+
+    private lateinit var projectA: FilePath
+    private lateinit var projectB: FilePath
+
+    /** The Commit panel lists two files of the fixture's project, the first one ticked. */
+    private fun withFilesOfProject(block: (com.intellij.openapi.vfs.VirtualFile, com.intellij.openapi.vfs.VirtualFile) -> Unit) {
+        val fileA = myFixture.addFileToProject("src/A.java", "class A {}").virtualFile
+        val fileB = myFixture.addFileToProject("src/B.java", "class B {}").virtualFile
+        projectA = LocalFilePath(fileA.path, false)
+        projectB = LocalFilePath(fileB.path, false)
+        stamps[projectA] = CommitInclusionMarks.Stamp(-1, 1, 100)
+        stamps[projectB] = CommitInclusionMarks.Stamp(-1, 1, 100)
+        changeA = Change(null, revision(projectA))
+        changeB = Change(null, revision(projectB))
+        val root = ChangesBrowserNode.createRoot()
+        val folder = ChangesBrowserNode.createFilePath(LocalFilePath(fileA.parent.path, true))
+        root.add(folder)
+        folder.add(ChangesBrowserNode.createChange(project, changeA))
+        folder.add(ChangesBrowserNode.createChange(project, changeB))
+        tree.show(DefaultTreeModel(root))
+        tree.setIncludedChanges(listOf(changeA))
+        block(fileA, fileB)
+    }
+
+    fun `test the project tree gets no checkboxes while the Commit panel shows none or the feature is off`() {
+        assertSame(overlay, CommitInclusionMarks.overlayFor(project))
+        CommitInclusionMarks.isEnabled = false
+        try {
+            assertNull(CommitInclusionMarks.overlayFor(project))
+        } finally {
+            CommitInclusionMarks.isEnabled = true
+        }
+        tree.isShowCheckboxes = false
+        assertNull(CommitInclusionMarks.overlayFor(project))
+    }
+
+    fun `test the project tree's checkbox follows the commit and cycles like the Commit panel's`() = withFilesOfProject { fileA, fileB ->
+        assertSame("the Commit panel shows checkboxes", overlay, CommitInclusionMarks.overlayFor(project))
+        overlay.syncInclusion()
+        assertEquals(CommitInclusionMarks.Tick.TICKED, overlay.tickOf(fileA))
+        assertEquals(CommitInclusionMarks.Tick.NONE, overlay.tickOf(fileB))
+        assertNull("an unchanged file has no checkbox", overlay.tickOf(myFixture.addFileToProject("src/C.java", "class C {}").virtualFile))
+
+        overlay.clickFromProjectTree(fileB)
+        assertEquals("ticked", CommitInclusionMarks.Tick.TICKED, overlay.tickOf(fileB))
+        assertTrue("in the commit", tree.includedSet.contains(changeB))
+        stamps[projectB] = CommitInclusionMarks.Stamp(-1, 2, 200)
+        overlay.syncInclusion()
+        assertEquals("changed since the tick", CommitInclusionMarks.Tick.MARKED, overlay.tickOf(fileB))
+        overlay.clickFromProjectTree(fileB)
+        assertEquals("a marked file is unticked", CommitInclusionMarks.Tick.NONE, overlay.tickOf(fileB))
+        assertFalse(tree.includedSet.contains(changeB))
+
+        overlay.clickFromProjectTree(fileA)
+        assertEquals("a ticked file is marked for another look and stays in", CommitInclusionMarks.Tick.MARKED, overlay.tickOf(fileA))
+        assertTrue(tree.includedSet.contains(changeA))
+        assertTrue("the Commit panel shows the same dash", overlay.isFlagged(projectA))
+    }
+
+    fun `test git's numstat sums to the branch's lines, binary files as zero`() {
+        assertEquals(ChangeLineStats.Lines(858, 8), BranchLineStats.parseNumstat(listOf("850\t6\tsrc/A.java", "8\t2\tsrc/{old => new}/B.java", "-\t-\tlogo.png")))
+        assertEquals(ChangeLineStats.Lines(0, 0), BranchLineStats.parseNumstat(emptyList()))
+    }
+
+    fun `test the Commit panel shows the branch's lines against develop after its top row`() {
+        val stats = project.service<BranchLineStats>()
+        val defaults = Pair(stats.compute, stats.onComputed)
+        var computed = 0
+        try {
+            stats.compute = { ChangeLineStats.Lines(858, 8) }
+            stats.onComputed = { computed++ }
+            render()
+            com.intellij.testFramework.PlatformTestUtil.waitWithEventsDispatching("branch count", { computed > 0 }, 10)
+            val image = render()
+            val row = tree.getRowBounds(0)
+            val after = (row.x + row.width until tree.width).flatMap { x -> (row.y until row.y + row.height).map { y -> java.awt.Color(image.getRGB(x, y)) } }
+            assertTrue("green digits after the top row", after.any { it.green > it.red + 40 && it.green > it.blue + 20 })
+            assertTrue("red digits after them", after.any { it.red > it.green + 40 && it.red > it.blue + 20 })
+        } finally {
+            stats.compute = defaults.first
+            stats.onComputed = defaults.second
+        }
+    }
+
+    fun `test a file edited back to the content it was ticked with loses the dash`() = withFilesOfProject { _, fileB ->
+        contents[projectB] = "class B {}"
+        overlay.syncInclusion()
+        overlay.clickFromProjectTree(fileB)
+        assertEquals(CommitInclusionMarks.Tick.TICKED, overlay.tickOf(fileB))
+
+        stamps[projectB] = CommitInclusionMarks.Stamp(-1, 2, 200)
+        contents[projectB] = "class B {}a"
+        assertEquals("an \"a\" added", CommitInclusionMarks.Tick.MARKED, overlay.tickOf(fileB))
+
+        stamps[projectB] = CommitInclusionMarks.Stamp(-1, 3, 300)
+        contents[projectB] = "class B {}"
+        assertEquals("the \"a\" removed again", CommitInclusionMarks.Tick.TICKED, overlay.tickOf(fileB))
+
+        stamps[projectB] = CommitInclusionMarks.Stamp(-1, 4, 400)
+        contents.remove(projectB)
+        assertEquals("unreadable now counts as changed", CommitInclusionMarks.Tick.MARKED, overlay.tickOf(fileB))
+    }
+
+    fun `test Commit (Cmd+K) keeps the checkboxes set by hand`() = withFilesOfProject { _, _ ->
+        val keeper = KeepInclusionOnCommit()
+        keeper.before(KeepInclusionOnCommit.COMMIT, project)
+        tree.inclusionModel.addInclusion(listOf(changeB)) // what the platform does on Commit
+        keeper.after(KeepInclusionOnCommit.COMMIT)
+        assertEquals("only the file ticked before", setOf<Any>(changeA), tree.includedSet.toSet())
+
+        keeper.before(KeepInclusionOnCommit.COMMIT, project)
+        tree.inclusionModel.clearInclusion()
+        tree.inclusionModel.addInclusion(listOf(changeB))
+        keeper.after(KeepInclusionOnCommit.COMMIT)
+        assertEquals("a reset to other files is undone too", setOf<Any>(changeA), tree.includedSet.toSet())
+
+        keeper.before("CheckinFiles", project)
+        tree.inclusionModel.addInclusion(listOf(changeB))
+        keeper.after("CheckinFiles")
+        assertTrue("committing a chosen file is the platform's", tree.includedSet.contains(changeB))
+
+        tree.inclusionModel.removeInclusion(listOf(changeB))
+        tree.isShowCheckboxes = false
+        keeper.before(KeepInclusionOnCommit.COMMIT, project)
+        tree.isShowCheckboxes = true
+        tree.inclusionModel.addInclusion(listOf(changeB))
+        keeper.after(KeepInclusionOnCommit.COMMIT)
+        assertEquals("kept also when the panel showed no checkboxes before", setOf<Any>(changeA), tree.includedSet.toSet())
+
+        CommitInclusionMarks.isEnabled = false
+        try {
+            keeper.before(KeepInclusionOnCommit.COMMIT, project)
+            tree.inclusionModel.addInclusion(listOf(changeB))
+            keeper.after(KeepInclusionOnCommit.COMMIT)
+            assertTrue("the feature off leaves Commit alone", tree.includedSet.contains(changeB))
+        } finally {
+            CommitInclusionMarks.isEnabled = true
+        }
+    }
+
+    fun `test the project tree draws the checkbox before a changed file's icon and takes its clicks`() = withFilesOfProject { fileA, _ ->
+        val psiManager = com.intellij.psi.PsiManager.getInstance(project)
+        val settings = com.intellij.ide.projectView.ViewSettings.DEFAULT
+        val folder = javax.swing.tree.DefaultMutableTreeNode(com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode(project, psiManager.findDirectory(fileA.parent)!!, settings))
+        val file = javax.swing.tree.DefaultMutableTreeNode(com.intellij.ide.projectView.impl.nodes.PsiFileNode(project, psiManager.findFile(fileA)!!, settings))
+        folder.add(file)
+        val projectTree = com.intellij.ui.treeStructure.Tree(DefaultTreeModel(folder)).apply {
+            setSize(300, 80)
+            expandRow(0)
+            doLayout()
+        }
+        val defaultCommitOf = ProjectTreeTicks.commitOf
+        ProjectTreeTicks.commitOf = { overlay }
+        val ticks = ProjectTreeTicks.install(projectTree)
+        try {
+            val path = TreePath(file.path)
+            assertNotNull("a file under a folder", ticks.fileOf(path))
+            assertNull("the folder itself", ticks.fileOf(TreePath(folder.path)))
+            val member = javax.swing.tree.DefaultMutableTreeNode(com.intellij.ide.projectView.impl.nodes.PsiFileNode(project, psiManager.findFile(fileA)!!, settings))
+            file.add(member)
+            assertNull("a node inside a node of the same file", ticks.fileOf(TreePath(member.path)))
+            file.remove(member)
+            val row = projectTree.getRowForPath(path)
+            val box = ticks.boxOf(row, path)!!
+            assertTrue("before the icon", box.x + box.width <= projectTree.getRowBounds(row).x)
+
+            val image = BufferedImage(projectTree.width, projectTree.height, BufferedImage.TYPE_INT_RGB)
+            projectTree.paint(image.createGraphics())
+            val background = image.getRGB(1, projectTree.height - 1)
+            assertTrue("the checkbox is drawn", (box.x until box.x + box.width).any { x -> image.getRGB(x, box.y + box.height / 2) != background })
+
+            val decision = ticks.decide(Point(box.x + box.width / 2, box.y + box.height / 2))!!
+            assertTrue("the platform does not see the click", decision.consume)
+            decision.onClick()
+            assertEquals(CommitInclusionMarks.Tick.MARKED, overlay.tickOf(fileA))
+            val rowBounds = projectTree.getRowBounds(row)
+            assertNotNull("the box's left edge", ticks.decide(Point(box.x, box.y + box.height / 2)))
+            assertNotNull("between the box and the icon", ticks.decide(Point(rowBounds.x - 1, box.y + box.height / 2)))
+            assertNotNull("the row's top edge above the box", ticks.decide(Point(box.x + box.width / 2, rowBounds.y)))
+            assertNull("a press on the file name is the tree's", ticks.decide(Point(rowBounds.x + 5, box.y + box.height / 2)))
+        } finally {
+            ProjectTreeTicks.uninstall(projectTree)
+            ProjectTreeTicks.commitOf = defaultCommitOf
+        }
     }
 }

@@ -6,6 +6,8 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -13,9 +15,14 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vcs.FilePath
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.changes.Change
+import com.intellij.openapi.vcs.changes.InclusionListener
+import com.intellij.openapi.vcs.changes.InclusionModel
+import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
 import com.intellij.openapi.vcs.changes.ui.ChangesListView
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
@@ -32,6 +39,7 @@ import java.awt.Point
 import java.awt.Rectangle
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.WeakHashMap
 import javax.swing.JComponent
@@ -40,8 +48,8 @@ import javax.swing.tree.TreePath
 
 /**
  * The Commit tool window's checkboxes say which files go into the commit. The plugin adds a third look to them:
- * a dash on a file ticked by hand whose content moved on since (edited by the developer, or written on disk by a
- * tool), and on a ticked file clicked once, which marks it for another look while keeping it in the commit. The
+ * a dash on a file ticked by hand whose content differs from what it was at the tick (edited by the developer, or
+ * written on disk by a tool; edited back, it loses the dash again), and on a ticked file clicked once, which marks it for another look while keeping it in the commit. The
  * next click unticks it as usual, and ticking it again takes the file's current content as the new baseline.
  * Only files ticked by a click get a baseline: files the IDE ticks on its own, or that were ticked before the
  * plugin saw the tree, would otherwise show the dash on every keystroke.
@@ -72,6 +80,7 @@ object CommitInclusionMarks {
         synchronized(installed) { installed.add(tree) }
         currentFile.track(tree)
         CheckboxClicks.register(tree) { point -> overlay.decide(point) }
+        overlay.startListening()
         tree.repaint()
         return overlay
     }
@@ -100,6 +109,24 @@ object CommitInclusionMarks {
         synchronized(installed) { installed.toList() }.forEach { it.repaint() }
     }
 
+    /** The project's Commit panel while it shows checkboxes: the owner of what the project tree's checkboxes show. */
+    fun overlayFor(project: Project): InclusionOverlay? =
+        synchronized(installed) { installed.toList() }
+            .filter { it is ChangesTree && it.project === project }
+            .firstNotNullOfOrNull { (it.getClientProperty(INSTALLED) as? InclusionOverlay)?.takeIf(InclusionOverlay::isActive) }
+
+    /** The project's Commit panel, also while it shows no checkboxes: Cmd+K resets its inclusion either way. */
+    fun anyOverlayFor(project: Project): InclusionOverlay? =
+        overlayFor(project) ?: synchronized(installed) { installed.toList() }
+            .filter { it is ChangesTree && it.project === project }
+            .firstNotNullOfOrNull { it.getClientProperty(INSTALLED) as? InclusionOverlay }
+
+    /** What a commit includes at a moment, with the model it was read from. */
+    class Inclusion internal constructor(internal val model: InclusionModel, internal val items: Set<Any>)
+
+    /** How a file stands in the commit: left out, ticked, ticked with only some lines, or ticked and marked for another look. */
+    enum class Tick { NONE, TICKED, PARTIAL, MARKED }
+
     /** What identifies a file's content at a moment: the open document's stamp when there is one, and the file's own stamps. */
     data class Stamp(val document: Long, val file: Long, val time: Long) {
         /** A different document stamp counts only when both sides had a document; the file stamps always count. */
@@ -114,6 +141,21 @@ object CommitInclusionMarks {
             Stamp(document, file.modificationStamp, file.timeStamp)
         }
     }
+
+    /** Replaceable in tests; the file's text as the editor sees it (unsaved edits included), null for a binary or missing file. */
+    var contentOf: (FilePath) -> CharSequence? = { path ->
+        path.virtualFile?.takeIf { it.isValid && !it.isDirectory && !it.fileType.isBinary }?.let { file ->
+            ReadAction.compute<CharSequence?, RuntimeException> {
+                FileDocumentManager.getInstance().getCachedDocument(file)?.immutableCharSequence ?: LoadTextUtil.loadText(file)
+            }
+        }
+    }
+
+    private fun digestOf(path: FilePath): ByteArray? =
+        contentOf(path)?.let { MessageDigest.getInstance("SHA-256").digest(it.toString().toByteArray(Charsets.UTF_8)) }
+
+    /** The content a file was ticked with: its stamps, to skip the comparison while nothing was written, and a digest of its text. */
+    private class Baseline(val stamp: Stamp, val digest: ByteArray?)
 
     /** The file a node stands for: a change by its path after the change (before it, when deleted); ChangesUtil moves between IDE versions, so the revisions are read directly. */
     fun pathOf(userObject: Any?): FilePath? = when (userObject) {
@@ -131,7 +173,10 @@ object CommitInclusionMarks {
         internal val markedRow: Rectangle? get() = mark.markedRow
 
         /** Content baseline of every file ticked by a click, taken right after the tick. */
-        private val baselines = HashMap<FilePath, Stamp>()
+        private val baselines = HashMap<FilePath, Baseline>()
+
+        /** The last comparison with the baseline per file, valid while the file's stamps stay the same. */
+        private val verdicts = HashMap<FilePath, Pair<Stamp, Boolean>>()
 
         /** Files whose tick came from a click on the checkbox; only they get a baseline. */
         private val tickedByClick = HashSet<FilePath>()
@@ -140,6 +185,10 @@ object CommitInclusionMarks {
         private val flagged = HashSet<FilePath>()
 
         private var listening: Disposable? = null
+
+        private val inclusionListener = object : InclusionListener {
+            override fun inclusionChanged() = ProjectTreeTicks.repaintAll()
+        }
 
         val resizeListener = object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) = fitTree()
@@ -152,11 +201,22 @@ object CommitInclusionMarks {
             fitTree()
         }
 
-        /** The content listeners live only while the overlay is in a component hierarchy, so a closed project does not keep the tree alive. */
-        override fun addNotify() {
-            super.addNotify()
+        /**
+         * The listeners live as long as the overlay is installed, or until the project closes: the project tree keeps
+         * showing the commit's checkboxes while the Commit panel is hidden and out of the component hierarchy.
+         */
+        fun startListening() {
             if (listening != null) return
             val disposable = Disposer.newDisposable("BetterCodeReview.commitMarks").also { listening = it }
+            Disposer.register(tree.project, disposable)
+            val modelListener = java.beans.PropertyChangeListener {
+                items = null
+                ProjectTreeTicks.repaintAll()
+            }
+            tree.addPropertyChangeListener(JTree.TREE_MODEL_PROPERTY, modelListener)
+            Disposer.register(disposable) { tree.removePropertyChangeListener(JTree.TREE_MODEL_PROPERTY, modelListener) }
+            tree.inclusionModel.addInclusionListener(inclusionListener)
+            Disposer.register(disposable) { tree.inclusionModel.removeInclusionListener(inclusionListener) }
             EditorFactory.getInstance().eventMulticaster.addDocumentListener(object : DocumentListener {
                 override fun documentChanged(event: DocumentEvent) {
                     if (baselines.isEmpty()) return
@@ -173,7 +233,7 @@ object CommitInclusionMarks {
         }
 
         override fun removeNotify() {
-            stopListening()
+            mark.stop()
             super.removeNotify()
         }
 
@@ -185,6 +245,7 @@ object CommitInclusionMarks {
 
         private fun repaintIfShowing() {
             if (tree.isShowing) tree.repaint()
+            ProjectTreeTicks.repaintAll()
         }
 
         private fun fitTree() {
@@ -193,35 +254,47 @@ object CommitInclusionMarks {
 
         override fun contains(x: Int, y: Int): Boolean = false
 
-        private val active: Boolean get() = CommitInclusionMarks.isEnabled && tree.isShowCheckboxes // qualified: JComponent has its own isEnabled
+        val isActive: Boolean get() = CommitInclusionMarks.isEnabled && tree.isShowCheckboxes // qualified: JComponent has its own isEnabled
 
         /** Fully ticked, not the platform's own "[-]" of a file with only some lines included. */
         private fun isTicked(userObject: Any): Boolean = tree.inclusionModel.getInclusionState(userObject) == ThreeStateCheckBox.State.SELECTED
 
         /** Brings the baselines in line with what is ticked now: clicked ticks take a baseline, removed ticks drop it and the flag. */
         fun syncInclusion() {
+            if (items == null) {
+                items = (tree.model.root as? ChangesBrowserNode<*>)?.traverseObjectsUnder()
+                    ?.filter { pathOf(it)?.isDirectory == false }
+                    ?.toList()?.associateBy { pathOf(it)!!.path }
+                    .orEmpty()
+            }
             val included = tree.includedSet.filter { isTicked(it) }.mapNotNull { pathOf(it) }.toSet()
             baselines.keys.retainAll(included)
+            verdicts.keys.retainAll(included)
             flagged.retainAll(included)
             tickedByClick.retainAll(included)
             for (path in tickedByClick) {
-                if (path !in baselines) stampOf(path)?.let { baselines[path] = it }
+                if (path !in baselines) stampOf(path)?.let { baselines[path] = Baseline(it, digestOf(path)) }
             }
         }
 
-        /** The dash shows on a ticked file that is flagged or whose content moved away from its baseline (a deletion counts). */
+        /** The dash shows on a ticked file that is flagged or whose content differs from its baseline (a deletion counts). */
         fun isMarked(path: FilePath): Boolean {
             if (path in flagged) return true
             val baseline = baselines[path] ?: return false
             val now = stampOf(path) ?: return true
-            return now.changedSince(baseline)
+            if (!now.changedSince(baseline.stamp)) return false
+            verdicts[path]?.takeIf { it.first == now }?.let { return it.second }
+            val changed = baseline.digest == null || digestOf(path)?.contentEquals(baseline.digest) != true
+            verdicts[path] = now to changed
+            return changed
         }
 
         fun isFlagged(path: FilePath): Boolean = path in flagged
 
         /** The current-file mark shows with or without checkboxes; the dashes only while the Commit panel shows checkboxes. */
         override fun paintComponent(g: Graphics) {
-            val dashes = active
+            tree.project.service<BranchLineStats>().paint(g, tree)
+            val dashes = isActive
             val current = currentFile.path
             if (!dashes && current == null) {
                 mark.painted(null)
@@ -258,7 +331,7 @@ object CommitInclusionMarks {
          * on an unticked file is the platform's, but remembered as a tick by hand. Everything else is the platform's.
          */
         fun decide(point: Point): CheckboxClicks.Decision? {
-            if (!active) return null
+            if (!isActive) return null
             val row = tree.getClosestRowForLocation(point.x, point.y).takeIf { it >= 0 } ?: return null
             val path = tree.getPathForRow(row) ?: return null
             if (!tree.model.isLeaf(path.lastPathComponent)) return null
@@ -279,9 +352,57 @@ object CommitInclusionMarks {
                     tree.requestFocusInWindow()
                     flagged.add(filePath)
                     tree.repaint()
+                    ProjectTreeTicks.repaintAll()
                 }
                 else -> null // the platform unticks a marked file; a partially included file is the platform's alone
             }
+        }
+
+        /** Every change and new file the Commit panel lists, by path; folders of its grouping are left out. Rebuilt by [syncInclusion] after the tree's model changes. */
+        private var items: Map<String, Any>? = null
+
+        private fun inclusionItemOf(file: VirtualFile): Any? = items?.get(file.path)
+
+        /** How [file] stands in the commit, as of the last [syncInclusion]; null when the Commit panel has no checkbox for it. */
+        fun tickOf(file: VirtualFile): Tick? {
+            val item = inclusionItemOf(file) ?: return null
+            return when (tree.inclusionModel.getInclusionState(item)) {
+                ThreeStateCheckBox.State.NOT_SELECTED -> Tick.NONE
+                ThreeStateCheckBox.State.DONT_CARE -> Tick.PARTIAL
+                ThreeStateCheckBox.State.SELECTED -> if (pathOf(item)?.let(::isMarked) == true) Tick.MARKED else Tick.TICKED
+            }
+        }
+
+        fun inclusion(): Inclusion = Inclusion(tree.inclusionModel, tree.inclusionModel.getInclusion().toSet())
+
+        /** Puts [before] back by undoing only what changed since, so a file with some lines left out keeps them out. */
+        fun restore(before: Inclusion) {
+            val model = tree.inclusionModel
+            if (model !== before.model) return
+            val now = model.getInclusion()
+            val added = now.filter { it !in before.items }
+            val dropped = before.items.filter { it !in now }
+            if (added.isNotEmpty()) model.removeInclusion(added)
+            if (dropped.isNotEmpty()) model.addInclusion(dropped)
+        }
+
+        /** A click on the project tree's checkbox, with the Commit panel's cycle: tick (taking a baseline), mark, untick. */
+        fun clickFromProjectTree(file: VirtualFile) {
+            syncInclusion()
+            val item = inclusionItemOf(file) ?: return
+            val path = pathOf(item) ?: return
+            when (tickOf(file)) {
+                Tick.TICKED -> flagged.add(path)
+                Tick.MARKED -> tree.inclusionModel.removeInclusion(listOf(item))
+                Tick.NONE, Tick.PARTIAL -> {
+                    tree.inclusionModel.addInclusion(listOf(item))
+                    tickedByClick.add(path)
+                }
+                null -> return
+            }
+            syncInclusion()
+            tree.repaint()
+            ProjectTreeTicks.repaintAll()
         }
     }
 
@@ -291,6 +412,7 @@ object CommitInclusionMarks {
         override fun setSelected(e: AnActionEvent, state: Boolean) {
             isEnabled = state
             repaintAll()
+            ProjectTreeTicks.repaintAll()
         }
     }
 }

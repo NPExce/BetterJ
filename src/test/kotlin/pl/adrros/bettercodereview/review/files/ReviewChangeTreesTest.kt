@@ -5,6 +5,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.vcs.LocalFilePath
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.openapi.vcs.history.ShortVcsRevisionNumber
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.ui.treeStructure.Tree
 import java.awt.image.BufferedImage
@@ -81,6 +82,53 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertEquals("bar at the left edge", bar, image.getRGB(1, currentRow.y + currentRow.height / 2) and 0xFFFFFF)
         assertTrue("tint over the row", otherMid != currentMid)
         assertTrue("other row has no bar", (image.getRGB(1, otherRow.y + otherRow.height / 2) and 0xFFFFFF) != bar)
+    }
+
+    fun `test the top row shows the lines added and removed after its text`() {
+        val stats = project.service<pl.adrros.bettercodereview.commit.ChangeLineStats>()
+        val defaults = Pair(stats.count, stats.onCounted)
+        var repaints = 0
+        try {
+            stats.count = { _, committed -> assertTrue(committed); pl.adrros.bettercodereview.commit.ChangeLineStats.Lines(120, 34) }
+            stats.onCounted = { repaints++ }
+            // Like the pull request's tree grouped by module: a hidden root, the module row, a folder, the files.
+            val root = com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode.createRoot()
+            val module = com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode.createFilePath(LocalFilePath("/repo", true))
+            val folder = com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode.createFilePath(LocalFilePath("/repo/src", true))
+            root.add(module)
+            module.add(folder)
+            listOf("/repo/src/A.java", "/repo/src/B.java").forEach { folder.add(object : com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode<RefComparisonChange>(change(it)) {
+                override fun getTextPresentation(): String = it
+            }) }
+            val tree = Tree(DefaultTreeModel(root)).apply {
+                isRootVisible = false
+                setSize(400, 120)
+                expandRow(0)
+                expandRow(1)
+                doLayout()
+                ReviewChangeTrees.install(this, project.service<CurrentReviewFile>())
+            }
+            val overlay = overlays(tree).single()
+            assertNull("nothing until the commits are fetched", overlay.lineTotalOf(module))
+            assertEquals("no count started before", 0, repaints)
+            overlay.revisionsFetched = true
+            assertNull("nothing until counted", overlay.lineTotalOf(module))
+            PlatformTestUtil.waitWithEventsDispatching("count", { repaints > 0 }, 10)
+            assertEquals(pl.adrros.bettercodereview.commit.ChangeLineStats.Lines(240, 68), overlay.lineTotalOf(module))
+
+            val image = render(tree)
+            fun coloursAfterText(row: Int): List<java.awt.Color> {
+                val bounds = tree.getRowBounds(row)
+                return (bounds.x + bounds.width until tree.width).flatMap { x -> (bounds.y until bounds.y + bounds.height).map { y -> java.awt.Color(image.getRGB(x, y)) } }
+            }
+            val top = coloursAfterText(0)
+            assertTrue("green digits after the module row's text", top.any { it.green > it.red + 40 && it.green > it.blue + 20 })
+            assertTrue("red digits after them", top.any { it.red > it.green + 40 && it.red > it.blue + 20 })
+            assertFalse("a folder below shows no total", coloursAfterText(1).any { it.green > it.red + 40 && it.green > it.blue + 20 })
+        } finally {
+            stats.count = defaults.first
+            stats.onCounted = defaults.second
+        }
     }
 
     fun `test the mark pulses only while a marked row is painted`() {

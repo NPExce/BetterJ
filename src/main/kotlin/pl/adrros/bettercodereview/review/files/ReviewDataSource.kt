@@ -36,6 +36,8 @@ class ReviewDataSource internal constructor(
     private val threads: Flow<List<GHPullRequestReviewThread>>,
     private val viewedStates: Flow<Map<String, GHPullRequestFileViewedState>>,
     val repositoryRootPath: String,
+    /** Fetches the pull request's commits into the local repository, which reading their files from git needs. */
+    val ensureRevisionsFetched: suspend () -> Unit = {},
 ) {
     /** Repository-relative path of every pending comment, sorted. */
     val pendingCommentPaths: Flow<List<String>>
@@ -77,7 +79,8 @@ class ReviewDataSource internal constructor(
                 val threads = dataProvider.reviewData.threadsComputationFlow
                     .filter { it.isSuccess }
                     .map { it.result!!.getOrThrow() }
-                ReviewDataSource(threads, viewedStatesOf(dataProvider.viewedStateData), root.path)
+                val changes = dataProvider.changesData
+                ReviewDataSource(threads, viewedStatesOf(dataProvider.viewedStateData), root.path) { changes.ensureAllRevisionsFetched() }
             } catch (e: ReflectiveOperationException) {
                 unavailable(e)
             } catch (e: RuntimeException) {

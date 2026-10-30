@@ -10,6 +10,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.paint.RectanglePainter2D
 import com.intellij.util.ui.JBUI
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode
 import com.intellij.ui.render.RenderingUtil
 import com.intellij.util.ui.UIUtil
@@ -24,6 +25,10 @@ import com.intellij.util.ui.tree.TreeUtil
 import kotlinx.coroutines.Job
 import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
 import org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel
+import com.intellij.openapi.vcs.history.VcsRevisionNumber
+import git4idea.GitContentRevision
+import git4idea.GitRevisionNumber
+import pl.adrros.bettercodereview.commit.ChangeLineStats
 import pl.adrros.bettercodereview.review.DecorationOwner
 import java.awt.Color
 import java.awt.Component
@@ -48,6 +53,8 @@ object ReviewChangeTrees {
     private const val REVIEW_TREE_FACTORY = "com.intellij.collaboration.ui.codereview.changes.CodeReviewChangeListComponentFactory"
     private const val BAR_WIDTH = CurrentFileMark.BAR_WIDTH
     private const val FOLDER_BAR_ALPHA = 128
+    private const val MAX_CACHED_CHANGES = 5_000
+    private const val FETCH_WAIT_MS = 10_000L
 
     val HIGHLIGHT: Color get() = CurrentFileMark.HIGHLIGHT
 
@@ -143,6 +150,15 @@ object ReviewChangeTrees {
                     if (LOG.isDebugEnabled) LOG.debug("Pending comments in ${it.distinct().size} file(s)")
                     overlay.pendingMarks = PendingMarks.of(source.repositoryRootPath, it)
                 }
+            }
+        }
+        launch {
+            collectMarks("line totals") {
+                // The plugin fetches the commits only when a diff opens; the counts read them from git. A fetch that
+                // hangs (a credentials prompt, a slow remote) must not hide the total for commits that are already local.
+                val fetched = kotlinx.coroutines.withTimeoutOrNull(FETCH_WAIT_MS) { source.ensureRevisionsFetched() } != null
+                log(if (fetched) "Line totals: the pull request's commits are local" else "Line totals: fetching the pull request's commits takes over ${FETCH_WAIT_MS / 1000} s, counting anyway")
+                overlay.revisionsFetched = true
             }
         }
         launch {
@@ -328,6 +344,12 @@ object ReviewChangeTrees {
             val clip = g.clipBounds
             for (row in visibleRows(visible)) {
                 val path = tree.getPathForRow(row) ?: continue
+                val group = topGroupOf(path)
+                if (group != null) {
+                    tree.getRowBounds(row)?.takeIf { clip == null || clip.intersects(Rectangle(visible.x, it.y, visible.width, it.height)) }
+                        ?.let { paintLineTotal(g, group, row, it) }
+                    continue
+                }
                 val nodePath = pathOf(TreeUtil.getLastUserObject(path)) ?: continue
                 val bounds = tree.getRowBounds(row) ?: continue
                 val rowRect = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
@@ -402,6 +424,66 @@ object ReviewChangeTrees {
                 val textX = pillX + (pillWidth - metrics.stringWidth(text)) / 2
                 val textY = pillY + (pillHeight + metrics.ascent - metrics.descent) / 2
                 g2.drawString(text, textX, textY)
+            } finally {
+                g2.dispose()
+            }
+        }
+
+        /**
+         * The rows that carry the line total: the tree's top level of grouping (a repository, a module or a folder),
+         * which already shows the file count. Files listed flat at the top get none.
+         */
+        private fun topGroupOf(path: TreePath): ChangesBrowserNode<*>? {
+            val node = path.lastPathComponent as? ChangesBrowserNode<*> ?: return null
+            if (path.pathCount != (if (tree.isRootVisible) 1 else 2) || tree.model.isLeaf(node)) return null
+            return node
+        }
+
+        /** Set once the pull request's commits are in the local repository; until then no line total is counted. */
+        var revisionsFetched = false
+            set(value) {
+                field = value
+                repaint()
+            }
+
+        private val vcsChanges = HashMap<RefComparisonChange, Change>()
+
+        /** Lines added and removed in the pull request's files under [node]; null until all of them are counted. */
+        internal fun lineTotalOf(node: ChangesBrowserNode<*>): ChangeLineStats.Lines? {
+            if (!revisionsFetched) return null
+            if (vcsChanges.size > MAX_CACHED_CHANGES) vcsChanges.clear()
+            val changes = node.traverseObjectsUnder().filter(RefComparisonChange::class.java).map { vcsChanges.getOrPut(it) { it.toVcsChange() } }.toList()
+            if (loggedOutcomes.add("line total of ${changes.size}")) LOG.info("Line totals: the top row lists ${changes.size} pull request file(s)")
+            if (changes.isEmpty()) return null
+            return currentFile.project.service<ChangeLineStats>().totalFor(changes, committed = true)
+        }
+
+        private fun RefComparisonChange.toVcsChange() = Change(
+            filePathBefore?.let { gitRevision(it, revisionNumberBefore) },
+            filePathAfter?.let { gitRevision(it, revisionNumberAfter) },
+        )
+
+        private fun gitRevision(path: FilePath, number: VcsRevisionNumber) =
+            GitContentRevision.createRevision(path, number as? GitRevisionNumber ?: GitRevisionNumber(number.asString()), currentFile.project)
+
+        /** "+added −removed" right after the top row's text, which ends with the file count (and the branch or the module's path). */
+        private fun paintLineTotal(g: Graphics, node: ChangesBrowserNode<*>, row: Int, bounds: Rectangle) {
+            val lines = lineTotalOf(node) ?: return
+            if (lines.added == 0 && lines.deleted == 0) return
+            val g2 = g.create() as Graphics2D
+            try {
+                com.intellij.ide.ui.UISettings.setupAntialiasing(g2)
+                g2.font = tree.font
+                val metrics = g2.fontMetrics
+                val y = bounds.y + (bounds.height - metrics.height) / 2 + metrics.ascent
+                // On the focused selection the row's own foreground keeps the text readable.
+                val onSelection = tree.isRowSelected(row) && tree.hasFocus()
+                var x = bounds.x + bounds.width + metrics.stringWidth("  ")
+                for ((text, color) in listOf("+${lines.added}" to ChangeLineStats.ADDED, " −${lines.deleted}" to ChangeLineStats.DELETED)) {
+                    g2.color = if (onSelection) UIUtil.getTreeSelectionForeground(true) else color
+                    g2.drawString(text, x, y)
+                    x += metrics.stringWidth(text)
+                }
             } finally {
                 g2.dispose()
             }

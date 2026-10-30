@@ -17,7 +17,11 @@
                 cycles tick, dash ("read it again"), empty.</li>
             <li>In the Commit tool window a file you ticked that changed since (edited by you or written on disk by a tool)
                 shows a dash in its checkbox, the file open in the editor gets the same purple mark as in the pull request's tree, and clicking a ticked file first shows the dash, then unticks it; the file stays in
-                the commit while dashed. Next to the number of changed files the change list shows the lines added and removed. Both click cycles can be switched off in the trees' context menus.</li>
+                the commit while dashed; edited back to the content it was ticked with, it shows the tick again. Next to the number of changed files the change list shows the lines added and removed. Both click cycles can be switched off in the trees' context menus.</li>
+            <li>Line counts: the pull request's tree shows the lines added and removed next to its file count, and the Commit
+                window shows the whole branch against develop (its commits plus the work not committed yet).</li>
+            <li>The Commit window's checkboxes also show in the project tree, in front of each changed file, and Commit (Cmd+K)
+                keeps them as they were instead of ticking every change.</li>
             <li>Colour folders and files of the project (Package Color in the project tree's and editor tab's context menus):
                 the colour shows in the project tree, the change trees and the editor tabs, and as the background of the
                 package line of files inside. The palette is yours to edit in Settings | Tools | Package Colors; settings
@@ -39,6 +43,11 @@
         <listener class="pl.adrros.bettercodereview.colors.PackageColorsRefresher"
                   topic="pl.adrros.bettercodereview.colors.PackageColors$Listener"/>
     </projectListeners>
+
+    <applicationListeners>
+        <listener class="pl.adrros.bettercodereview.commit.KeepInclusionOnCommit"
+                  topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
+    </applicationListeners>
 
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="BetterCodeReview" displayType="BALLOON"/>

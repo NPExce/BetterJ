@@ -18,6 +18,7 @@ import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
 import kotlinx.coroutines.CoroutineScope
+import pl.adrros.bettercodereview.review.files.ReviewChangeTrees
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,9 +28,9 @@ import java.util.concurrent.ConcurrentHashMap
 private val LOG = logger<ChangeLineStats>()
 
 /**
- * Lines added and removed per local change, counted like the diff viewer counts them (a modified line is one of
- * each), with unsaved edits included. Counted in the background and cached by revision and modification stamp;
- * until every change of a list is counted the list shows no total.
+ * Lines added and removed per change, counted like the diff viewer counts them (a modified line is one of each):
+ * local changes with unsaved edits included, and the committed changes of a pull request. Counted in the background
+ * and cached by revision and modification stamp; until every change of a list is counted the list shows no total.
  */
 @Service(Service.Level.PROJECT)
 class ChangeLineStats(private val project: Project, private val scope: CoroutineScope) {
@@ -37,22 +38,26 @@ class ChangeLineStats(private val project: Project, private val scope: Coroutine
         operator fun plus(other: Lines) = Lines(added + other.added, deleted + other.deleted)
     }
 
-    /** What makes a change's count stale: its paths, the base revision and the current content's stamp. */
-    data class Key(val before: String?, val beforeRevision: String?, val after: String?, val afterStamp: Long) {
-        /** The change itself, whatever its content: one entry per change, overwritten as it is edited. */
-        val change: Pair<String?, String?> get() = before to after
+    /** What makes a change's count stale: its paths, both revisions and, for a local change, the current content's stamp. */
+    data class Key(val before: String?, val beforeRevision: String?, val after: String?, val afterRevision: String?, val afterStamp: Long, val committed: Boolean) {
+        /** A local change has one entry, overwritten as it is edited; a committed change never changes, so it is an entry of its own. */
+        val change: Any get() = if (committed) this else (before to after)
     }
 
     private class Entry(val key: Key, val lines: Lines?, val failedAt: Long = 0)
 
-    private val latest = ConcurrentHashMap<Pair<String?, String?>, Entry>()
-    private val counting = ConcurrentHashMap.newKeySet<Pair<String?, String?>>()
+    private val latest = ConcurrentHashMap<Any, Entry>()
+    private val counting = ConcurrentHashMap.newKeySet<Any>()
+    private val reported = ConcurrentHashMap.newKeySet<Key>()
 
-    /** Replaceable in tests; runs on a background thread. */
-    var count: suspend (Change) -> Lines = ::countChange
+    /** Replaceable in tests; runs on a background thread. The flag tells a committed change from a local one. */
+    var count: suspend (Change, Boolean) -> Lines = ::countChange
 
-    /** Called whenever counts arrive; repaints the Commit trees. */
-    var onCounted: () -> Unit = { CommitInclusionMarks.repaintAll() }
+    /** Called whenever counts arrive; repaints the Commit and pull request trees. */
+    var onCounted: () -> Unit = {
+        CommitInclusionMarks.repaintAll()
+        ReviewChangeTrees.repaintAll()
+    }
 
     /** Replaceable in tests. */
     var now: () -> Long = System::currentTimeMillis
@@ -60,13 +65,14 @@ class ChangeLineStats(private val project: Project, private val scope: Coroutine
     /**
      * The sum over [changes], or null until each of them has been counted once. A change edited since keeps its last
      * count until the new one arrives, so the total does not blink while typing. One count per change runs at a time.
+     * [committed] changes compare two revisions, so editing the file locally does not recount them.
      */
-    fun totalFor(changes: Collection<Change>): Lines? {
+    fun totalFor(changes: Collection<Change>, committed: Boolean = false): Lines? {
         var total = Lines(0, 0)
         var complete = true
         val toCount = ArrayList<Pair<Key, Change>>()
         for (change in changes) {
-            val key = keyOf(change)
+            val key = keyOf(change, committed)
             val entry = latest[key.change]
             entry?.lines?.let { total += it } ?: run { complete = false }
             val stale = entry == null || entry.key != key || (entry.failedAt > 0 && now() - entry.failedAt > RETRY_MS)
@@ -79,39 +85,49 @@ class ChangeLineStats(private val project: Project, private val scope: Coroutine
     private fun launchCount(toCount: List<Pair<Key, Change>>) {
         scope.launch(Dispatchers.IO) {
             if (latest.size > MAX_CACHED) latest.clear()
+            // Committed changes are counted once per pull request, so their progress goes to the IDE log at INFO.
+            val committed = toCount.count { it.first.committed }
+            if (committed > 0) LOG.info("Counting the lines of $committed pull request file(s)")
+            var failed = 0
             for ((key, change) in toCount) {
                 latest[key.change] = try {
-                    Entry(key, count(change))
+                    Entry(key, count(change, key.committed))
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     // Retried after a pause rather than remembered as zero: a VCS hiccup must not stick.
-                    LOG.debug("Could not count the lines of $change", e)
+                    if (key.committed) failed++
+                    if (key.committed && reported.add(key)) LOG.info("Could not count the lines of ${key.after ?: key.before} (${key.beforeRevision}..${key.afterRevision})", e)
+                    else LOG.debug("Could not count the lines of $change", e)
                     Entry(key, latest[key.change]?.lines, failedAt = now())
                 } finally {
                     counting.remove(key.change)
                 }
             }
+            if (committed > 0) LOG.info("Counted the lines of $committed pull request file(s), $failed failed")
             withContext(Dispatchers.EDT) { onCounted() }
         }
     }
 
-    private fun keyOf(change: Change): Key {
+    private fun keyOf(change: Change, committed: Boolean): Key {
         val after = change.afterRevision
-        val file = after?.file?.virtualFile
+        val file = if (committed) null else after?.file?.virtualFile
         val stamp = file?.let { FileDocumentManager.getInstance().getCachedDocument(it)?.modificationStamp ?: it.modificationStamp } ?: -1
         return Key(
             change.beforeRevision?.file?.path,
             change.beforeRevision?.revisionNumber?.asString(),
             after?.file?.path,
+            after?.revisionNumber?.asString(),
             stamp,
+            committed,
         )
     }
 
-    private suspend fun countChange(change: Change): Lines {
+    private suspend fun countChange(change: Change, committed: Boolean): Lines {
         if (isBinary(change.beforeRevision) || isBinary(change.afterRevision)) return Lines(0, 0)
         val before = change.beforeRevision?.content.orEmpty()
-        val after = change.afterRevision?.let { revision -> readAction { revision.content } }.orEmpty()
+        // Only the working copy needs the read lock (unsaved documents); a committed revision is read from git, which must not hold it.
+        val after = change.afterRevision?.let { revision -> if (committed) revision.content else readAction { revision.content } }.orEmpty()
         if (before.length > MAX_CHARS || after.length > MAX_CHARS) return Lines(0, 0)
         return countLines(before, after)
     }

@@ -78,6 +78,7 @@ class ReviewUiDecorationService : Disposable {
         guarded { (component as? JPanel)?.takeIf(DetailsReviewButton::isDetailsActionsRow)?.let(DetailsReviewButton::watch) }
         guarded { (component as? ChangesTree)?.takeIf(ReviewChangeTrees::isReviewChangesTree)?.let(ReviewChangeTrees::watch) }
         guarded { (component as? ChangesListView)?.let(CommitInclusionMarks::watch) }
+        guarded { (component as? com.intellij.ide.projectView.impl.ProjectViewTree)?.let(pl.adrros.bettercodereview.commit.ProjectTreeTicks::watch) }
     }
 
     private fun showPopup(pane: JEditorPane, event: MouseEvent) {
@@ -110,6 +111,7 @@ class ReviewUiDecorationService : Disposable {
         listener = null
         guarded { ReviewChangeTrees.uninstallAll() }
         guarded { CommitInclusionMarks.uninstallAll() }
+        guarded { pl.adrros.bettercodereview.commit.ProjectTreeTicks.uninstallAll() }
         guarded { pl.adrros.bettercodereview.colors.PackageLines.removeAll() }
         guarded {
             for (window in Window.getWindows()) {
@@ -131,7 +133,7 @@ class ReviewUiDecorationService : Disposable {
 
     companion object {
         /** Markers whose value is the injected component. */
-        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED, ReviewChangeTrees.INSTALLED, CommitInclusionMarks.INSTALLED)
+        val INJECTED_FLAGS: List<String> = listOf(CommentCopyButtons.INSTALLED, CommentInputButtons.INSTALLED, DetailsReviewButton.INSTALLED, ReviewChangeTrees.INSTALLED, CommitInclusionMarks.INSTALLED, pl.adrros.bettercodereview.commit.ProjectTreeTicks.INSTALLED)
         val ALL_FLAGS: List<String> = INJECTED_FLAGS + CommentCopyButtons.WATCHED + CheckboxClicks.HANDLER
 
         /** Listener code runs inside AWT event dispatch; an exception there would be reported as an IDE error. */
