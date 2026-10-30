@@ -8,7 +8,7 @@ BetterJ fills the gaps IntelliJ IDEA leaves in daily work: how big is this branc
 which files did I already check, what changed after I ticked it, which part of the project am I in. It started
 as a code review helper and now covers the whole loop from writing to committing to reviewing.
 
-Current version: **<!-- version -->0.18.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterJ-0.18.0.zip) ·
+Current version: **<!-- version -->0.19.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterJ-0.19.0.zip) ·
 [Installation guide](INSTALL.md) · [What's new](CHANGELOG.md)
 
 <!-- Screenshot: docs/screenshots/overview.png -->
@@ -47,7 +47,7 @@ Current version: **<!-- version -->0.18.0<!-- /version -->** · [⬇ Download th
 
 ## Install
 
-Download [BetterJ-0.18.0.zip](dist/BetterJ-0.18.0.zip) and install it from disk; the [installation guide](INSTALL.md)
+Download [BetterJ-0.19.0.zip](dist/BetterJ-0.19.0.zip) and install it from disk; the [installation guide](INSTALL.md)
 walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
 
 ## All features in detail
@@ -118,7 +118,7 @@ walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
    Next to the number of files, each change list shows the lines added and removed (`+120 −34`), counted like the
    diff viewer counts them (a changed line is one of each), unsaved edits included. Binary files and files over two
    million characters count as zero. The pull request's change tree shows the same total on its top row (the
-   repository, module or folder with the file count), read from git at the compared revisions; opening the tree fetches the pull request's
+   repository, module or folder with the file count), followed by the files it adds and deletes (`· 3 new · 1 deleted`), read from git at the compared revisions; opening the tree fetches the pull request's
    commits, as opening a diff does. Theme keys: `BetterCodeReview.LineStats.added`,
    `.deleted`.
    The Commit panel's top row also shows the whole branch against develop (`vs develop +858 −8`): from where the

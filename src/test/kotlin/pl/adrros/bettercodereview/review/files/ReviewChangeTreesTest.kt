@@ -84,6 +84,19 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         assertTrue("other row has no bar", (image.getRGB(1, otherRow.y + otherRow.height / 2) and 0xFFFFFF) != bar)
     }
 
+    fun `test the top row counts the files the pull request adds and deletes`() {
+        val root = com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode.createRoot()
+        val module = com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode.createFilePath(LocalFilePath("/repo", true))
+        root.add(module)
+        listOf(change("/repo/New.java"), change("/repo/Changed.java", "/repo/Changed.java"), change(null, "/repo/Gone.java"), change("/repo/Moved.java", "/repo/Old.java"))
+            .forEach { module.add(object : com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode<RefComparisonChange>(it) {
+                override fun getTextPresentation(): String = "file"
+            }) }
+        val tree = Tree(DefaultTreeModel(root)).apply { isRootVisible = false }
+        ReviewChangeTrees.install(tree, project.service<CurrentReviewFile>())
+        assertEquals("one new, one deleted; a changed or moved file is neither", 1 to 1, overlays(tree).single().fileKindsOf(module))
+    }
+
     fun `test the top row shows the lines added and removed after its text`() {
         val stats = project.service<pl.adrros.bettercodereview.commit.ChangeLineStats>()
         val defaults = Pair(stats.count, stats.onCounted)

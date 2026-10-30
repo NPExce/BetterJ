@@ -466,10 +466,35 @@ object ReviewChangeTrees {
         private fun gitRevision(path: FilePath, number: VcsRevisionNumber) =
             GitContentRevision.createRevision(path, number as? GitRevisionNumber ?: GitRevisionNumber(number.asString()), currentFile.project)
 
-        /** "+added −removed" right after the top row's text, which ends with the file count (and the branch or the module's path). */
+        /** Files under [node] the pull request adds and deletes: a change with no path before is new, one with no path after is gone. */
+        internal fun fileKindsOf(node: ChangesBrowserNode<*>): Pair<Int, Int> {
+            val changes = node.traverseObjectsUnder().filter(RefComparisonChange::class.java).toList()
+            return changes.count { it.filePathBefore == null } to changes.count { it.filePathAfter == null }
+        }
+
+        /**
+         * "+added −removed · 3 new · 1 deleted" right after the top row's text, which ends with the file count (and the
+         * branch or the module's path). The file kinds show at once; the line counts once git has been read.
+         */
         private fun paintLineTotal(g: Graphics, node: ChangesBrowserNode<*>, row: Int, bounds: Rectangle) {
-            val lines = lineTotalOf(node) ?: return
-            if (lines.added == 0 && lines.deleted == 0) return
+            val lines = lineTotalOf(node)?.takeIf { it.added != 0 || it.deleted != 0 }
+            val (created, deleted) = fileKindsOf(node)
+            val separator = " · " to com.intellij.ui.SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
+            val parts = buildList {
+                if (lines != null) {
+                    add("+${lines.added}" to ChangeLineStats.ADDED)
+                    add(" −${lines.deleted}" to ChangeLineStats.DELETED)
+                }
+                if (created > 0) {
+                    if (isNotEmpty()) add(separator)
+                    add("$created new" to ChangeLineStats.ADDED)
+                }
+                if (deleted > 0) {
+                    if (isNotEmpty()) add(separator)
+                    add("$deleted deleted" to ChangeLineStats.DELETED)
+                }
+            }
+            if (parts.isEmpty()) return
             val g2 = g.create() as Graphics2D
             try {
                 com.intellij.ide.ui.UISettings.setupAntialiasing(g2)
@@ -479,7 +504,7 @@ object ReviewChangeTrees {
                 // On the focused selection the row's own foreground keeps the text readable.
                 val onSelection = tree.isRowSelected(row) && tree.hasFocus()
                 var x = bounds.x + bounds.width + metrics.stringWidth("  ")
-                for ((text, color) in listOf("+${lines.added}" to ChangeLineStats.ADDED, " −${lines.deleted}" to ChangeLineStats.DELETED)) {
+                for ((text, color) in parts) {
                     g2.color = if (onSelection) UIUtil.getTreeSelectionForeground(true) else color
                     g2.drawString(text, x, y)
                     x += metrics.stringWidth(text)

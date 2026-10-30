@@ -2,6 +2,10 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.19.0 - 2026-10-30
+
+- The pull request's tree also counts the files it adds and deletes, after the lines: `+760 −45 · 3 new · 1 deleted`.
+
 ## 0.18.0 - 2026-10-30
 
 - Renamed to **BetterJ**, with a new icon: the plugin now covers committing, branches and package colours, not only
