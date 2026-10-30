@@ -8,7 +8,7 @@ BetterJ fills the gaps IntelliJ IDEA leaves in daily work: how big is this branc
 which files did I already check, what changed after I ticked it, which part of the project am I in. It started
 as a code review helper and now covers the whole loop from writing to committing to reviewing.
 
-Current version: **<!-- version -->0.18.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterJ.zip) ·
+Current version: **<!-- version -->0.18.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterJ-0.18.0.zip) ·
 [Installation guide](INSTALL.md) · [What's new](CHANGELOG.md)
 
 <!-- Screenshot: docs/screenshots/overview.png -->
@@ -47,7 +47,7 @@ Current version: **<!-- version -->0.18.0<!-- /version -->** · [⬇ Download th
 
 ## Install
 
-Download [BetterJ.zip](dist/BetterJ.zip) and install it from disk; the [installation guide](INSTALL.md)
+Download [BetterJ-0.18.0.zip](dist/BetterJ-0.18.0.zip) and install it from disk; the [installation guide](INSTALL.md)
 walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
 
 ## All features in detail
@@ -152,9 +152,9 @@ walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
 ## Versions and releases
 
 - `main` holds the changes approved for the plugin. Not every push is a release.
-- A release is a push that also bumps `version` in `build.gradle.kts`, rebuilds `dist/BetterJ.zip`, updates the
-  version at the top of this file and adds an entry to [CHANGELOG.md](CHANGELOG.md). `scripts/release.sh` does the
-  build, the zip and the version line in one go.
+- A release is a push that also bumps `version` in `build.gradle.kts`, adds an entry to [CHANGELOG.md](CHANGELOG.md)
+  and runs `scripts/release.sh`: it builds `dist/BetterJ-<version>.zip`, removes the previous zip and points the
+  download links and the version at the top of this file to the new one.
 
 ## Build from source
 

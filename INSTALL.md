@@ -8,10 +8,10 @@
 
 ## Install
 
-1. Download [BetterJ.zip](dist/BetterJ.zip). Keep it zipped; do not unpack it.
+1. Download [BetterJ-0.18.0.zip](dist/BetterJ-0.18.0.zip). Keep it zipped; do not unpack it.
 2. In IntelliJ IDEA open *Settings* (`⌘,` on macOS, `Ctrl+Alt+S` on Windows and Linux) and go to *Plugins*.
 3. Click the gear icon ⚙ at the top and choose *Install Plugin from Disk…*.
-4. Pick the downloaded `BetterJ.zip` and click *OK*.
+4. Pick the downloaded `BetterJ-0.18.0.zip` and click *OK*.
 5. Restart the IDE when asked.
 
 To check it worked: *Settings | Plugins | Installed* lists **BetterJ** with the version shown at the top
