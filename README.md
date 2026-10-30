@@ -1,6 +1,53 @@
 # BetterCodeReview
 
-Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA (and other JetBrains IDEs):
+**Code review and committing in IntelliJ IDEA, without the guesswork.**
+
+BetterCodeReview fills the gaps in the GitHub pull request and Commit windows bundled with IntelliJ IDEA: how big
+is this branch, which file am I looking at, which files did I already check, what changed after I ticked it.
+
+Current version: **<!-- version -->0.17.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterCodeReview.zip) ·
+[Installation guide](INSTALL.md) · [What's new](CHANGELOG.md)
+
+<!-- Screenshot: docs/screenshots/overview.png -->
+
+## Why you want it
+
+- **Know the size before you start.** The pull request tree shows `+858 −8` next to its file count, and the Commit
+  window shows the whole branch against develop (`vs develop +858 −8`), also right after you check a branch out.
+- **Never lose your place.** The file open in the editor pulses purple in the pull request tree and in the Commit
+  window.
+- **Trust your ticks.** Tick a file for the commit and it shows a dash the moment it changes again, edited by you
+  or rewritten by a coding agent. Undo the edit and the tick comes back. The same checkboxes sit in the project tree.
+- **Review faster.** Files you viewed before new commits arrived get a dash, files with your unsent comments get an
+  amber mark, double-click opens the real file, and *Review…* approves or requests changes from the IDE.
+- **Write better comments.** Copy any review comment, type `:smile:` for emoji, paste screenshots straight into a
+  comment as GitHub attachments.
+- **See where you are.** Colour your packages; the colour follows the folder into the project tree, the change
+  trees, the editor tabs and the `package` line of every file inside.
+
+## Highlights
+
+### Line counts in pull requests, commits and the whole branch
+<!-- Screenshot: docs/screenshots/line-counts.png -->
+
+### Commit checkboxes that notice changes, in the Commit window and the project tree
+<!-- Screenshot: docs/screenshots/commit-checkboxes.png -->
+
+### Where you are and what is left in a pull request
+<!-- Screenshot: docs/screenshots/pull-request-tree.png -->
+
+### Package colours
+<!-- Screenshot: docs/screenshots/package-colours.png -->
+
+### Review comments: copy, emoji, screenshots, submit
+<!-- Screenshot: docs/screenshots/comments.png -->
+
+## Install
+
+Download [BetterCodeReview.zip](dist/BetterCodeReview.zip) and install it from disk; the [installation guide](INSTALL.md)
+walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
+
+## All features in detail
 
 1. **Copy review comments** - a copy button next to edit / delete / react when a comment is hovered,
    `Cmd+C` / `Ctrl+C` while a comment has focus (selection, or the whole comment when nothing is selected),
@@ -55,9 +102,9 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    pull request is affected: in the tree of a single commit, and in a GitLab merge request, the diff opens as before.
    *Double-Click Opens File* in the tree's context menu switches the behaviour off.
 9. **Commit window: see which ticked files changed** - the checkboxes in the Commit tool window choose what goes
-   into the commit. A file you ticked by clicking its checkbox shows a dash once it is modified afterwards: edited in
-   the editor, saved, rewritten on disk by a tool such as a coding agent, or deleted. Any rewrite counts, also one that
-   leaves the content as it was, and reverting the edit does not take the dash away; untick and tick again does. A
+   into the commit. A file you ticked by clicking its checkbox shows a dash once its content differs from what it was
+   at the tick: edited in the editor, rewritten on disk by a tool such as a coding agent, or deleted. Edited back to
+   that content (typing an "a" and deleting it), it shows the tick again. Binary files dash on any rewrite. A
    ticked file you click once gets the dash too, to mark it for another look. A dashed file is still part of the
    commit. Clicking a dashed file unticks it as usual, and ticking it again takes its current content as the new
    baseline. Files the IDE ticks on its own, files ticked before the plugin saw the tree, and files ticked with the
@@ -67,7 +114,20 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
    the tree's context menu switches the feature off.
    Next to the number of files, each change list shows the lines added and removed (`+120 −34`), counted like the
    diff viewer counts them (a changed line is one of each), unsaved edits included. Binary files and files over two
-   million characters count as zero. Theme keys: `BetterCodeReview.LineStats.added`, `.deleted`.
+   million characters count as zero. The pull request's change tree shows the same total on its top row (the
+   repository, module or folder with the file count), read from git at the compared revisions; opening the tree fetches the pull request's
+   commits, as opening a diff does. Theme keys: `BetterCodeReview.LineStats.added`,
+   `.deleted`.
+   The Commit panel's top row also shows the whole branch against develop (`vs develop +858 −8`): from where the
+   branch left `origin/develop` (or a local `develop`) up to the files on disk, so its commits and the work not
+   committed yet, read with `git diff --numstat`. Unsaved edits and files not added to git are left out. It shows
+   with no local changes too, so checking out a branch to review gives its size at once; on develop itself it is
+   hidden.
+   The project tree repeats the Commit panel's checkboxes in front of each changed or new file's icon, where a
+   folder has its expand arrow (one column further left on a file the tree can expand), with the same cycle and the
+   same dash. They show only while the Commit panel shows checkboxes.
+   Commit (Cmd+K) keeps the checkboxes as they were; without the plugin it ticks every change of the active
+   changelist.
 
 10. **Package colours** - right-click a folder or file in the project tree (or an editor tab) and pick a colour under
    *Package Color*. The colour shows as the background in the project tree, in the change trees (Commit, pull request)
@@ -85,20 +145,26 @@ Small additions to the GitHub Pull Requests review UI bundled with IntelliJ IDEA
 - A GitHub account configured in *Settings | Version Control | GitHub* (the upload reuses its token).
 - Attachments: github.com only. GitHub Enterprise is not supported, the upload endpoint differs.
 
-## Build
+
+## Versions and releases
+
+- `main` holds the changes approved for the plugin. Not every push is a release.
+- A release is a push that also bumps `version` in `build.gradle.kts`, rebuilds `dist/BetterCodeReview.zip`, updates the
+  version at the top of this file and adds an entry to [CHANGELOG.md](CHANGELOG.md). `scripts/release.sh` does the
+  build, the zip and the version line in one go.
+
+## Build from source
 
 ```bash
-JAVA_HOME=<JDK 21> ./gradlew buildPlugin
+JAVA_HOME=<JDK 21 or newer> ./gradlew buildPlugin
 ```
 
-The zip lands in `build/distributions/` (`BetterCodeReview-<version>.zip`). `gradle.properties` points `platformLocalPath` at a local IDE so the
-build needs no 1 GB download; remove the property to build against a downloaded IntelliJ IDEA Community 2026.1.
+The zip lands in `build/distributions/` (`BetterCodeReview-<version>.zip`). `gradle.properties` points `platformLocalPath`
+at a local IDE so the build needs no 1 GB download; remove the property to build against a downloaded IntelliJ IDEA
+Community 2026.1.
 
-Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbox).
-
-## Install
-
-*Settings | Plugins | ⚙ | Install Plugin from Disk…* and choose the zip from `build/distributions/`. Restart the IDE.
+Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbox). `./gradlew verifyPlugin` checks
+compatibility with 2026.1, 2026.2 and 2026.3.
 
 ## Caveats
 
