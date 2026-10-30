@@ -1,4 +1,4 @@
-# Installing BetterCodeReview
+# Installing BetterJ
 
 ## What you need
 
@@ -8,13 +8,13 @@
 
 ## Install
 
-1. Download [BetterCodeReview.zip](dist/BetterCodeReview.zip). Keep it zipped; do not unpack it.
+1. Download [BetterJ.zip](dist/BetterJ.zip). Keep it zipped; do not unpack it.
 2. In IntelliJ IDEA open *Settings* (`⌘,` on macOS, `Ctrl+Alt+S` on Windows and Linux) and go to *Plugins*.
 3. Click the gear icon ⚙ at the top and choose *Install Plugin from Disk…*.
-4. Pick the downloaded `BetterCodeReview.zip` and click *OK*.
+4. Pick the downloaded `BetterJ.zip` and click *OK*.
 5. Restart the IDE when asked.
 
-To check it worked: *Settings | Plugins | Installed* lists **BetterCodeReview** with the version shown at the top
+To check it worked: *Settings | Plugins | Installed* lists **BetterJ** with the version shown at the top
 of the [README](README.md).
 
 ## Update
@@ -24,7 +24,7 @@ What changed is in the [changelog](CHANGELOG.md).
 
 ## If you used ProjectTree Color Highlighter
 
-BetterCodeReview imports its folder colours (`.idea/highlightedFiles.xml`) on first use. Uninstall that plugin
+BetterJ imports its folder colours (`.idea/highlightedFiles.xml`) on first use. Uninstall that plugin
 afterwards: with both installed, its colours win over these.
 
 ## Switching single features off
@@ -41,5 +41,5 @@ The plugin writes what it does to the IDE log. *Help | Show Log in Finder* (or *
 
 ## Uninstall
 
-*Settings | Plugins | Installed*, select **BetterCodeReview**, click the arrow next to *Disable* and choose
+*Settings | Plugins | Installed*, select **BetterJ**, click the arrow next to *Disable* and choose
 *Uninstall*. Restart the IDE.

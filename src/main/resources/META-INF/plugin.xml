@@ -1,9 +1,9 @@
 <idea-plugin>
     <id>pl.adrros.bettercodereview</id>
-    <name>BetterCodeReview</name>
+    <name>BetterJ</name>
     <vendor>adrros</vendor>
     <description><![CDATA[
-        Better pull request reviews inside the IDE - small additions to the bundled GitHub Pull Requests UI:
+        Everyday upgrades for IntelliJ IDEA: pull request reviews, committing, line counts and package colours.
         <ul>
             <li>Copy review comments (Cmd/Ctrl+C on a comment, or the context menu) - whole comment or the selected part.</li>
             <li>Emoji in review comments: <code>:smile:</code> completion and a searchable emoji picker.</li>
@@ -50,7 +50,7 @@
     </applicationListeners>
 
     <extensions defaultExtensionNs="com.intellij">
-        <notificationGroup id="BetterCodeReview" displayType="BALLOON"/>
+        <notificationGroup id="BetterCodeReview" displayType="BALLOON" key="notification.group.name"/>
 
         <postStartupActivity implementation="pl.adrros.bettercodereview.review.ReviewUiDecorationInstaller"/>
         <postStartupActivity implementation="pl.adrros.bettercodereview.colors.OtherColorPluginCheck"/>

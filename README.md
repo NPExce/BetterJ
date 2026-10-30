@@ -1,11 +1,14 @@
-# BetterCodeReview
+<img src="src/main/resources/META-INF/pluginIcon.svg" width="72" alt="BetterJ icon">
 
-**Code review and committing in IntelliJ IDEA, without the guesswork.**
+# BetterJ
 
-BetterCodeReview fills the gaps in the GitHub pull request and Commit windows bundled with IntelliJ IDEA: how big
-is this branch, which file am I looking at, which files did I already check, what changed after I ticked it.
+**Everyday upgrades for IntelliJ IDEA: reviews, commits, branches and packages, without the guesswork.**
 
-Current version: **<!-- version -->0.17.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterCodeReview.zip) ·
+BetterJ fills the gaps IntelliJ IDEA leaves in daily work: how big is this branch, which file am I looking at,
+which files did I already check, what changed after I ticked it, which part of the project am I in. It started
+as a code review helper and now covers the whole loop from writing to committing to reviewing.
+
+Current version: **<!-- version -->0.18.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterJ.zip) ·
 [Installation guide](INSTALL.md) · [What's new](CHANGELOG.md)
 
 <!-- Screenshot: docs/screenshots/overview.png -->
@@ -44,7 +47,7 @@ Current version: **<!-- version -->0.17.0<!-- /version -->** · [⬇ Download th
 
 ## Install
 
-Download [BetterCodeReview.zip](dist/BetterCodeReview.zip) and install it from disk; the [installation guide](INSTALL.md)
+Download [BetterJ.zip](dist/BetterJ.zip) and install it from disk; the [installation guide](INSTALL.md)
 walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
 
 ## All features in detail
@@ -149,7 +152,7 @@ walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
 ## Versions and releases
 
 - `main` holds the changes approved for the plugin. Not every push is a release.
-- A release is a push that also bumps `version` in `build.gradle.kts`, rebuilds `dist/BetterCodeReview.zip`, updates the
+- A release is a push that also bumps `version` in `build.gradle.kts`, rebuilds `dist/BetterJ.zip`, updates the
   version at the top of this file and adds an entry to [CHANGELOG.md](CHANGELOG.md). `scripts/release.sh` does the
   build, the zip and the version line in one go.
 
@@ -159,7 +162,7 @@ walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
 JAVA_HOME=<JDK 21 or newer> ./gradlew buildPlugin
 ```
 
-The zip lands in `build/distributions/` (`BetterCodeReview-<version>.zip`). `gradle.properties` points `platformLocalPath`
+The zip lands in `build/distributions/` (`BetterJ-<version>.zip`). `gradle.properties` points `platformLocalPath`
 at a local IDE so the build needs no 1 GB download; remove the property to build against a downloaded IntelliJ IDEA
 Community 2026.1.
 

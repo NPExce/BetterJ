@@ -2,6 +2,13 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.18.0 - 2026-10-30
+
+- Renamed to **BetterJ**, with a new icon: the plugin now covers committing, branches and package colours, not only
+  reviews. Installs over BetterCodeReview and keeps its settings.
+- *Package Color* is back in the project tree's and the editor tab's context menus; the IDE dropped it for a missing
+  name.
+
 ## 0.17.0 - 2026-10-30
 
 - The Commit window shows the whole branch against develop (`vs develop +858 −8`): its commits plus the work not

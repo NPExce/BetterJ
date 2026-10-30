@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the version set in build.gradle.kts into dist/BetterCodeReview.zip and puts it in the README.
+# Builds the version set in build.gradle.kts into dist/BetterJ.zip and puts it in the README.
 # Commit and push the result yourself; add the CHANGELOG entry first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -10,6 +10,6 @@ grep -q "^## $version " CHANGELOG.md || { echo "CHANGELOG.md has no entry for $v
 
 ./gradlew buildPlugin --console=plain -q
 mkdir -p dist
-cp "build/distributions/BetterCodeReview-$version.zip" dist/BetterCodeReview.zip
+cp "build/distributions/BetterJ-$version.zip" dist/BetterJ.zip
 sed -i.bak "s|<!-- version -->.*<!-- /version -->|<!-- version -->$version<!-- /version -->|" README.md && rm README.md.bak
-echo "dist/BetterCodeReview.zip and README.md are at $version"
+echo "dist/BetterJ.zip and README.md are at $version"

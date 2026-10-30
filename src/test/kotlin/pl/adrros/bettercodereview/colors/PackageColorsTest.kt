@@ -136,6 +136,11 @@ class PackageColorsTest : BasePlatformTestCase() {
         assertEmpty(editor.markupModel.allHighlighters.filter { it.getTextAttributes(null)?.backgroundColor == Color.RED })
     }
 
+    fun `test the Package Color menu has its name, or the IDE drops it from the menu`() {
+        val group = com.intellij.openapi.actionSystem.ActionManager.getInstance().getAction("BetterCodeReview.PackageColor")
+        assertEquals("Package Color", group.templatePresentation.text)
+    }
+
     fun `test the project service starts with a palette`() {
         assertFalse(project.service<PackageColors>().colors.isEmpty())
     }
