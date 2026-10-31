@@ -139,6 +139,7 @@ object WindowCenteredCode {
         private var gutterWithoutPad = -1
         private var rightOfText = 0
         private var lastKey: List<Int>? = null
+        private var columnPx = -1
 
         private val laidOut = object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) = remember()
@@ -178,6 +179,7 @@ object WindowCenteredCode {
         private fun relayout() {
             if (editor.isDisposed) return
             lastKey = null
+            columnPx = -1
             editor.gutterComponentEx.revalidateMarkup()
         }
 
@@ -199,7 +201,7 @@ object WindowCenteredCode {
             val root = SwingUtilities.getRootPane(editor.component) ?: return px
             val scrollPane = editor.scrollPane
             if (root.width <= 0 || scrollPane.width <= 0) return px
-            val column = editor.settings.getRightMargin(editor.project) * EditorUtil.getSpaceWidth(Font.PLAIN, editor)
+            val column = column()
             if (column <= 0) return 0
             val paneLeft = SwingUtilities.convertPoint(scrollPane, 0, 0, root).x
             // Asked once per line of the file: one answer per layout, or per frame while gliding.
@@ -217,6 +219,25 @@ object WindowCenteredCode {
             }
             px = width
             return width
+        }
+
+        /**
+         * The text column in pixels: the code style's right margin for the file's language. The editor's own margin
+         * is the code style's general one until it is worked out in the background, and the strip is asked for sooner.
+         */
+        private fun column(): Int {
+            if (columnPx < 0) {
+                val file = editor.virtualFile
+                val project = editor.project
+                val chars = if (file != null && project != null) {
+                    com.intellij.application.options.CodeStyle.getSettings(project, file)
+                        .getRightMargin((file.fileType as? com.intellij.openapi.fileTypes.LanguageFileType)?.language)
+                } else {
+                    editor.settings.getRightMargin(project)
+                }
+                columnPx = chars * EditorUtil.getSpaceWidth(Font.PLAIN, editor)
+            }
+            return columnPx
         }
 
         override fun useMargin(): Boolean = false

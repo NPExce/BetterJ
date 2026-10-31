@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.20.10 - 2026-10-31
+
+- *Center Code on Window* takes the text column from the code style's right margin for the file's language. 0.20.9
+  read the editor's margin while it still held the general default (200 columns instead of 80 for Java), which put
+  the code against the left edge.
+
 ## 0.20.9 - 2026-10-31
 
 - *Center Code on Window* works out the strip while the editor lays itself out, in the same pass that moves it, so
