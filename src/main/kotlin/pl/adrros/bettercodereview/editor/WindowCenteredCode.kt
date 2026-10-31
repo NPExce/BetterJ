@@ -116,6 +116,15 @@ object WindowCenteredCode {
 
         val isRunning: Boolean get() = ticking != null
 
+        /** Puts the text at [position] at once, ending a glide. */
+        fun jumpTo(position: Int): Int {
+            stop()
+            shown = position
+            from = position
+            to = position
+            return position
+        }
+
         fun stop() {
             ticking?.stop()
             ticking = null
@@ -217,7 +226,8 @@ object WindowCenteredCode {
             val textLeft = paneLeft + gutterWithoutPad + px
             val visible = scrollPane.width - gutterWithoutPad - px - rightOfText
             val target = targetTextLeft(root.width, textLeft, visible, column, px)
-            val place = glide.positionAt(target, System.currentTimeMillis()) { relayout() }
+            // Pushed by a tool window on the left, the text follows its edge at once; a glide would trail behind it.
+            val place = if (target <= paneLeft + gutterWithoutPad) glide.jumpTo(target) else glide.positionAt(target, System.currentTimeMillis()) { relayout() }
             val width = (place - paneLeft - gutterWithoutPad).coerceIn(0, root.width / 2)
             if (kotlin.math.abs(width - px) > TOLERANCE_PX * 10) {
                 LOG.info("Center on window: window ${root.width}, editor from $paneLeft, column $column, pad $px -> $width px")

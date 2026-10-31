@@ -2,6 +2,11 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.20.12 - 2026-10-31
+
+- *Center Code on Window*: code pushed aside by a tool window on the left follows its edge at once, both ways,
+  instead of trailing behind it in a glide; the glide stays for the window's and the right tool window's changes.
+
 ## 0.20.11 - 2026-10-31
 
 - *Center Code on Window* measures the rest of the gutter only after a layout that took the strip's latest width.

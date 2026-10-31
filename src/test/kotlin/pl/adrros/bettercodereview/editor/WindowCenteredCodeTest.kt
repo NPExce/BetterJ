@@ -26,6 +26,10 @@ class WindowCenteredCodeTest : BasePlatformTestCase() {
             assertTrue("eased out: past the middle at half the time, $halfway", halfway in 601..699)
             assertEquals("arrived", 700, glide.positionAt(700, 1180) {})
             assertEquals("and stays", 700, glide.positionAt(700, 5000) {})
+            glide.positionAt(300, 6000) {}
+            assertEquals("pushed by a tool window: at once", 900, glide.jumpTo(900))
+            assertEquals("no glide left to finish", 900, glide.positionAt(900, 6010) {})
+            assertFalse(glide.isRunning)
         } finally {
             glide.stop()
         }
