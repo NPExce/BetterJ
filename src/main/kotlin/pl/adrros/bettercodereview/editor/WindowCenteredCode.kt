@@ -152,6 +152,7 @@ object WindowCenteredCode {
 
         init {
             editor.scrollPane.viewport.addComponentListener(laidOut)
+            editor.gutterComponentEx.addComponentListener(laidOut)
             editor.component.addHierarchyBoundsListener(moved)
         }
 
@@ -170,6 +171,7 @@ object WindowCenteredCode {
         fun detach() {
             glide.stop()
             editor.scrollPane.viewport.removeComponentListener(laidOut)
+            editor.gutterComponentEx.removeComponentListener(laidOut)
             editor.component.removeHierarchyBoundsListener(moved)
             if (shown) editor.gutter.closeTextAnnotations(listOf(this))
             shown = false
@@ -186,6 +188,9 @@ object WindowCenteredCode {
         /** After a layout: what the text's place is made of, apart from the strip. */
         private fun remember() {
             val viewport = editor.scrollPane.viewport
+            val gutter = editor.gutterComponentEx
+            // Only a layout that took the strip's latest width tells what the rest of the gutter takes.
+            if (gutter.width != gutter.preferredSize.width) return
             val measured = viewport.x - px
             val right = editor.scrollPane.width - viewport.x - viewport.width
             if (measured != gutterWithoutPad || right != rightOfText) {

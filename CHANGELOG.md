@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.20.11 - 2026-10-31
+
+- *Center Code on Window* measures the rest of the gutter only after a layout that took the strip's latest width.
+  It used to subtract a newer width from an older layout, so the code lost the middle once a tool window on the left
+  had pushed it aside and moved back.
+
 ## 0.20.10 - 2026-10-31
 
 - *Center Code on Window* takes the text column from the code style's right margin for the file's language. 0.20.9
