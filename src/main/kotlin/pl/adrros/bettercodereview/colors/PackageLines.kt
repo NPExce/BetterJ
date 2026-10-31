@@ -14,6 +14,7 @@ import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
 import java.awt.Color
@@ -21,11 +22,13 @@ import java.awt.Color
 /**
  * Tints the `package` line of a file in a coloured package with that package's colour, so the editor shows which
  * part of the project the file belongs to. Works for any language that declares its package on a line of its own
- * (Java, Kotlin, Scala, Groovy, Go); only the main editors get the tint.
+ * (Java, Kotlin, Scala, Groovy, Go). The main editors get the tint and both sides of a diff. A file whose own folder
+ * has no colour (a test next to coloured main sources) and a past revision, which has no file on disk, take the colour
+ * of the folder their package names.
  */
 object PackageLines {
     private val KEY = Key.create<RangeHighlighter>("BetterCodeReview.packageLine")
-    private val PACKAGE = Regex("""(?m)^[ \t]*package[ \t]+[A-Za-z_`]""")
+    private val PACKAGE = Regex("""(?m)^[ \t]*package[ \t]+([A-Za-z_`][\w.`]*)""")
 
     /** The package declaration sits near the top, after at most a licence header. */
     private const val SCAN_CHARS = 20_000
@@ -43,6 +46,12 @@ object PackageLines {
         return document.getLineNumber(match.range.first)
     }
 
+    /** The declared package, "org.alpha.x", or null. */
+    fun packageName(document: Document): String? {
+        val text = document.immutableCharSequence
+        return PACKAGE.find(text.subSequence(0, minOf(text.length, SCAN_CHARS)))?.groupValues?.get(1)?.replace("`", "")
+    }
+
     fun highlighterOf(editor: Editor): RangeHighlighter? = editor.getUserData(KEY)
 
     /** The tint for a file, or null; headless tests, whose files live outside the project's base directory, replace it. */
@@ -50,16 +59,35 @@ object PackageLines {
         project.service<PackageColors>().takeIf { it.tintsPackageLine }?.colorOf(file)
     }
 
-    /** Only editors of the editor area: diffs, previews and consoles stay as they are. */
+    /**
+     * The tint for a package seen in a diff of a past revision: the colour of its folder under the source roots, the
+     * roots where that folder exists first. Headless tests replace it.
+     */
+    var colorOfPackage: (Project, String) -> Color? = { project, name ->
+        val colors = project.service<PackageColors>().takeIf { it.tintsPackageLine }
+        val base = project.basePath
+        val relative = name.replace('.', '/')
+        if (colors == null || base == null) null
+        else ProjectRootManager.getInstance(project).contentSourceRoots
+            .sortedBy { it.findFileByRelativePath(relative) == null }
+            .firstNotNullOfOrNull { colors.colorOf(base, "${it.path}/$relative") }
+    }
+
+    /** Editors of the editor area and of diffs: previews and consoles stay as they are. */
     fun refresh(editor: Editor) {
-        if (editor.editorKind == EditorKind.MAIN_EDITOR) tint(editor)
+        if (editor.editorKind == EditorKind.MAIN_EDITOR || editor.editorKind == EditorKind.DIFF) tint(editor)
     }
 
     internal fun tint(editor: Editor) {
         if (editor.isDisposed) return
         val project = editor.project ?: return
-        val file = FileDocumentManager.getInstance().getFile(editor.document)?.takeIf { it.extension?.lowercase() in EXTENSIONS }
-        val color = file?.let { colorFor(project, it) }
+        val file = FileDocumentManager.getInstance().getFile(editor.document)
+        val color = when {
+            file != null -> file.takeIf { it.extension?.lowercase() in EXTENSIONS }
+                ?.let { colorFor(project, it) ?: packageName(editor.document)?.let { name -> colorOfPackage(project, name) } }
+            editor.editorKind == EditorKind.DIFF -> packageName(editor.document)?.let { colorOfPackage(project, it) }
+            else -> null
+        }
         val line = color?.let { packageLine(editor.document) }
         val existing = editor.getUserData(KEY)
         if (existing != null && existing.isValid && line != null &&

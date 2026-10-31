@@ -1,193 +1,218 @@
-<img src="src/main/resources/META-INF/pluginIcon.svg" width="72" alt="BetterJ icon">
+<img src="src/main/resources/META-INF/pluginIcon.svg" width="72" alt="Ikona BetterJ">
 
 # BetterJ
 
-**Everyday upgrades for IntelliJ IDEA: reviews, commits, branches and packages, without the guesswork.**
+**Codzienne usprawnienia IntelliJ IDEA: review, commity, branche i pakiety, bez zgadywania.**
 
-BetterJ fills the gaps IntelliJ IDEA leaves in daily work: how big is this branch, which file am I looking at,
-which files did I already check, what changed after I ticked it, which part of the project am I in. It started
-as a code review helper and now covers the whole loop from writing to committing to reviewing.
-
-Current version: **<!-- version -->0.19.0<!-- /version -->** · [⬇ Download the plugin](dist/BetterJ-0.19.0.zip) ·
-[Installation guide](INSTALL.md) · [What's new](CHANGELOG.md)
+Aktualna wersja: **<!-- version -->0.20.8<!-- /version -->** · [⬇ Pobierz plugin](dist/BetterJ-0.20.8.zip) ·
+[Instrukcja instalacji](INSTALL.md) · [Co nowego](CHANGELOG.md)
 
 <!-- Screenshot: docs/screenshots/overview.png -->
 
-## Why you want it
+## Co robi, w skrócie
 
-- **Know the size before you start.** The pull request tree shows `+858 −8` next to its file count, and the Commit
-  window shows the whole branch against develop (`vs develop +858 −8`), also right after you check a branch out.
-- **Never lose your place.** The file open in the editor pulses purple in the pull request tree and in the Commit
-  window.
-- **Trust your ticks.** Tick a file for the commit and it shows a dash the moment it changes again, edited by you
-  or rewritten by a coding agent. Undo the edit and the tick comes back. The same checkboxes sit in the project tree.
-- **Review faster.** Files you viewed before new commits arrived get a dash, files with your unsent comments get an
-  amber mark, double-click opens the real file, and *Review…* approves or requests changes from the IDE.
-- **Write better comments.** Copy any review comment, type `:smile:` for emoji, paste screenshots straight into a
-  comment as GitHub attachments.
-- **See where you are.** Colour your packages; the colour follows the folder into the project tree, the change
-  trees, the editor tabs and the `package` line of every file inside.
+- Pokazuje rozmiar zmian: `+858 −8` przy PR-ze, przy lokalnych zmianach i dla całego brancha (także w stosie PR-ów).
+- Podświetla w drzewie PR-a i w oknie Commit plik otwarty w edytorze.
+- Pilnuje zaznaczonych do commitu plików: zmieniony po zaznaczeniu plik dostaje kreskę `[-]`, a diff pokaże, co
+  zmieniło się od zaznaczenia.
+- Zapamiętuje zaznaczenia w oknie Commit, także po restarcie IDE i po `⌘K`.
+- Oznacza w PR-ze pliki do ponownego przeczytania i pliki z niewysłanymi komentarzami.
+- Wysyła review (Approve / Request Changes / Comment) prosto z IDE.
+- Kopiuje komentarze, wstawia emoji `:smile:`, wkleja zrzuty ekranu jako załączniki GitHuba.
+- Koloruje pakiety: drzewo projektu, drzewa zmian, zakładki edytora, linia `package` (też w diffie).
+- Trzyma kod na środku monitora, a nie edytora, gdy otwierasz boczne panele.
+- Każdą funkcję wyłączysz jednym kliknięciem: *Tools → BetterJ*.
 
-## Highlights
+## Lepsze pull requesty
 
-### Line counts in pull requests, commits and the whole branch
-<!-- Screenshot: docs/screenshots/line-counts.png -->
+- **Rozmiar PR-a od razu.** Górny wiersz drzewa PR-a pokazuje dodane i usunięte linie oraz nowe i usunięte pliki:
+  `+760 −45 · 3 new · 1 deleted`.
+- **Wiesz, gdzie jesteś.** Plik otwarty w edytorze delikatnie pulsuje na fioletowo w drzewie PR-a.
+- **Wiesz, co zostało.** Plik oznaczony jako przeczytany, który zmienił się w nowym commicie, dostaje kreskę zamiast
+  zwykłej kropki. Kliknięcie w zaznaczony plik też stawia kreskę („przeczytaj jeszcze raz”).
+- **Niewysłane komentarze widać.** Pliki z komentarzami Twojego niewysłanego review mają bursztynowy pasek i licznik.
+- **Podwójny klik otwiera plik**, a nie diff (na wybranym branchu PR-a). Alt+podwójny klik otwiera diff.
+- **Review bez przeglądarki.** Przycisk *Review…* obok Merge: Approve, Request Changes, Comment, także gdy ktoś już
+  zatwierdził.
+- **Wygodniejsze komentarze.** Kopiowanie komentarza (`⌘C` albo przycisk), emoji przez `:smi` i okno wyboru,
+  wklejanie zrzutów ekranu jako natywnych załączników GitHuba.
 
-### Commit checkboxes that notice changes, in the Commit window and the project tree
-<!-- Screenshot: docs/screenshots/commit-checkboxes.png -->
-
-### Where you are and what is left in a pull request
 <!-- Screenshot: docs/screenshots/pull-request-tree.png -->
-
-### Package colours
-<!-- Screenshot: docs/screenshots/package-colours.png -->
-
-### Review comments: copy, emoji, screenshots, submit
 <!-- Screenshot: docs/screenshots/comments.png -->
 
-## Install
+## Lepsza praca z lokalnymi zmianami
 
-Download [BetterJ-0.19.0.zip](dist/BetterJ-0.19.0.zip) and install it from disk; the [installation guide](INSTALL.md)
-walks through it. Supported: IntelliJ IDEA 2026.1 to 2026.3.
+- **Rozmiar zmian.** Okno Commit pokazuje przy liście zmian `+120 −34`, a obok rozmiar całego brancha:
+  `vs develop +858 −8`. Branch w stosie PR-ów liczy się od brancha pod nim (`vs ZT-847 +859 −9`), więc zgadza się
+  z tym, co pokazuje GitHub.
+- **Zaznaczenie, któremu można ufać.** Plik zaznaczony do commitu dostaje kreskę `[-]`, gdy jego treść się zmieni,
+  np. przez Ciebie albo agenta AI. Cofniesz zmianę, ptaszek wraca. Cykl kliknięć: `[ ] → [v] → [-] → [ ]`.
+- **Zaznaczenia nie znikają.** `⌘K` nie zaznacza wszystkiego na nowo, a po restarcie IDE wracają Twoje ptaszki.
+  Plik zmieniony przy zamkniętym IDE dostaje kreskę.
+- **Te same checkboxy w drzewie projektu**, przed ikoną zmienionego pliku.
+- **Otwarty plik widać** w oknie Commit, tak jak w drzewie PR-a.
 
-## All features in detail
+<!-- Screenshot: docs/screenshots/line-counts.png -->
+<!-- Screenshot: docs/screenshots/commit-checkboxes.png -->
 
-1. **Copy review comments** - a copy button next to edit / delete / react when a comment is hovered,
-   `Cmd+C` / `Ctrl+C` while a comment has focus (selection, or the whole comment when nothing is selected),
-   and a right-click menu with *Copy Comment* and *Copy Selection*. Works in the PR timeline, in diff threads
-   and in editor inlays.
-2. **Emoji in comments** - type `:smi` in a comment editor and pick from the completion popup (GitHub short codes,
-   inserted as Unicode glyphs). The 😀 button under the comment field, `Ctrl+Shift+;` (`⌘⇧;` on macOS) or *Edit | Insert Emoji…*
-   opens an emoji picker: a grid of all 1900+ GitHub emoji with a search box and the recently used ones on top.
-3. **Paste screenshots** - the paste shortcut (whatever your keymap binds it to), the image button under the
-   comment field or *Edit | Paste Image as Attachment* with an image on the clipboard (or image files copied from
-   a file manager) inserts an `![Uploading …]()` placeholder and uploads the image as a regular GitHub attachment
-   (`github.com/user-attachments/assets/...`). The link renders on github.com, in e-mails and in the IDE,
-   also for private repositories. Text next to the image wins unless it is just the image's address; copied files
-   always count as files. *Paste as Plain Text* always pastes the text.
+## Szerokie monitory: kod na środku
 
-4. **Submit the review from the IDE** - a *Review…* button in the pull request details next to Merge (and
-   *Submit Review…* in the details, changes and timeline context menus) opens GitHub's palette: Approve,
-   Request Changes, Comment, with a summary field and a way to discard pending comments. It is there in every
-   state, also after someone else already approved, where the bundled plugin hides its own button. Authors can
-   only comment, as on github.com.
+IntelliJ potrafi wyśrodkować kod (*Toggle Center View*), ale liczy środek edytora. Otwierasz panel z lewej, edytor
+się zwęża i kod ucieka w prawo. BetterJ liczy środek **całego okna**: kod zostaje tam, gdzie patrzysz, a boczne
+panele otwierają się obok niego. Gdy miejsca robi się za mało, kod przesuwa się tylko tyle, ile musi.
 
-5. **See where you are in the change tree** - the file open in the selected editor tab gets a gently pulsing
-   purple tint and a bar at the left edge in the pull request's file tree, on top of selection, hover and file
-   colours. It follows
-   the editor file matched by path, so it works when the real file is open (review on the checked-out branch);
-   a diff tab does not match. Renamed files match their new path, deleted files never do. The Commit tool window's
-   tree (and Local Changes) marks the open file the same way, with or without its checkboxes.
-6. **See where your unsent comments are** - files holding comments of your pending (not yet submitted) review,
-   new threads and replies alike, get an amber bar at the left edge and a round badge with the count (the badge
-   appears when the indentation leaves room for it). A collapsed folder gets a lighter bar; expanded folders show
-   nothing, their files do. The marks disappear once the review is submitted. Unresolved discussions are already
-   shown by the bundled plugin as a comment icon with a number next to the file; a pending thread counts there too.
-   Theme keys: `BetterCodeReview.CurrentFile.background`, `BetterCodeReview.PendingComments.foreground`,
+Włączasz w *Tools → BetterJ → Center code on window* (domyślnie wyłączone).
+
+## Kolory pakietów
+
+Prawy klik na folderze w drzewie projektu (albo na zakładce edytora) → *Package Color*. Kolor widać w drzewie
+projektu, w drzewach zmian (Commit, PR), na zakładkach edytora i za linią `package` w edytorze i w diffie. Paletę
+zmienisz w *Settings → Tools → Package Colors*.
+
+<!-- Screenshot: docs/screenshots/package-colours.png -->
+
+## Włączanie i wyłączanie funkcji
+
+*Tools → BetterJ* w pasku menu pokazuje wszystkie funkcje z ptaszkiem: kliknięcie włącza albo wyłącza. To samo, z
+opisem każdej funkcji, jest w *Settings → Tools → BetterJ* (wyszukiwarka Settings je znajduje).
+
+## Instalacja
+
+Pobierz [BetterJ-0.20.8.zip](dist/BetterJ-0.20.8.zip) i zainstaluj z dysku: *Settings → Plugins → ⚙ → Install
+Plugin from Disk…*. Krok po kroku w [instrukcji instalacji](INSTALL.md). Obsługiwane: IntelliJ IDEA 2026.1–2026.3.
+
+## Wszystkie funkcje w szczegółach
+
+1. **Kopiowanie komentarzy review** - przycisk kopiowania obok edycji / usuwania / reakcji po najechaniu na
+   komentarz, `⌘C` / `Ctrl+C`, gdy komentarz ma fokus (zaznaczenie albo cały komentarz, gdy nic nie zaznaczono), i
+   menu kontekstowe z *Copy Comment* i *Copy Selection*. Działa na osi czasu PR-a, w wątkach diffu i we wstawkach
+   edytora.
+2. **Emoji w komentarzach** - wpisz `:smi` w polu komentarza i wybierz z podpowiedzi (skróty GitHuba, wstawiane jako
+   znaki Unicode). Przycisk 😀 pod polem, `Ctrl+Shift+;` (`⌘⇧;` na macOS) albo *Edit → Insert Emoji…* otwiera okno
+   z ponad 1900 emoji GitHuba, wyszukiwarką i ostatnio używanymi na górze.
+3. **Wklejanie zrzutów ekranu** - skrót wklejania, przycisk obrazka pod polem komentarza albo *Edit → Paste Image as
+   Attachment* z obrazkiem w schowku (lub plikami obrazków skopiowanymi z Findera) wstawia `![Uploading …]()` i
+   wysyła obrazek jako zwykły załącznik GitHuba (`github.com/user-attachments/assets/...`). Link działa na
+   github.com, w mailach i w IDE, także w prywatnych repozytoriach. Tekst obok obrazka wygrywa, chyba że to tylko
+   adres obrazka; skopiowane pliki zawsze liczą się jako pliki. *Paste as Plain Text* zawsze wkleja tekst.
+4. **Wysyłanie review z IDE** - przycisk *Review…* w szczegółach PR-a obok Merge (i *Submit Review…* w menu
+   kontekstowych szczegółów, zmian i osi czasu) otwiera okno GitHuba: Approve, Request Changes, Comment, z polem
+   podsumowania i odrzuceniem oczekujących komentarzy. Jest dostępny zawsze, także gdy ktoś już zatwierdził (wtedy
+   wbudowany plugin chowa swój przycisk). Autor PR-a może tylko komentować, jak na github.com.
+5. **Gdzie jesteś w drzewie zmian** - plik otwarty w wybranej zakładce edytora dostaje w drzewie PR-a delikatnie
+   pulsujące fioletowe tło i pasek przy lewej krawędzi, ponad zaznaczeniem i kolorami plików. Dopasowanie jest po
+   ścieżce, więc działa, gdy otwarty jest prawdziwy plik (review na wybranym branchu); zakładka diffu się nie
+   dopasowuje. Plik po zmianie nazwy dopasowuje się po nowej ścieżce, usunięty nigdy. Drzewo okna Commit (i Local
+   Changes) oznacza otwarty plik tak samo, z checkboxami i bez.
+6. **Gdzie są niewysłane komentarze** - pliki z komentarzami Twojego oczekującego review (nowe wątki i odpowiedzi)
+   dostają bursztynowy pasek przy lewej krawędzi i okrągły licznik (gdy wcięcie zostawia na niego miejsce). Zwinięty
+   folder dostaje jaśniejszy pasek; rozwinięte foldery nic, ich pliki tak. Znaczniki znikają po wysłaniu review.
+   Klucze motywu: `BetterCodeReview.CurrentFile.background`, `BetterCodeReview.PendingComments.foreground`,
    `BetterCodeReview.PendingComments.text`.
-7. **See which viewed files changed again** - GitHub drops the "viewed" tick of a file when a later commit touches
-   it, and the bundled plugin then shows the same unread dot as for a file never looked at (the checkbox itself only
-   appears under the mouse). The plugin paints a dash over that slot: dot = not viewed, tick = viewed, dash = viewed
-   before, changed since. Clicking cycles the states: a ticked file clicked once shows the dash ("read it again"),
-   clicked again is unticked, clicked again is ticked; a file GitHub dismissed follows the same path, and that
-   click unticks it on GitHub. GitHub only stores ticked or not, so the dash after a click is the plugin's own flag,
-   kept per project and pull request (the newest 500) and dropped when the file is ticked elsewhere. The cycle acts
-   on plain left clicks on the checkbox; the keyboard and the context menu's own toggles go straight to GitHub.
-   *Viewed Checkbox Cycles Through Dash* in the tree's context menu switches the cycle off.
-   Theme keys: `BetterCodeReview.ViewedDismissed.dash` (defaults to the theme's selected checkbox colour),
-   `.dashOnCurrent` for the row of the open file and `.dashInBox` for the dash inside a checkbox.
-8. **Double-click opens the file** - double-click or Enter on a file in the pull request's tree opens the file
-   in the editor, which is what reading on the checked-out branch calls for; Alt+double-click and *Show Diff*
-   in the context menu open the diff as before (the platform ignores Enter with modifiers, so there is no
-   keyboard variant). When the pull request's branch is not the one checked out, the diff opens and a balloon
-   says why, once per tree. "Checked out" means the branch, not that the working copy equals the pull request's
-   head: unpulled commits or local edits can make line comments point elsewhere. Only the tree of the whole GitHub
-   pull request is affected: in the tree of a single commit, and in a GitLab merge request, the diff opens as before.
-   *Double-Click Opens File* in the tree's context menu switches the behaviour off.
-9. **Commit window: see which ticked files changed** - the checkboxes in the Commit tool window choose what goes
-   into the commit. A file you ticked by clicking its checkbox shows a dash once its content differs from what it was
-   at the tick: edited in the editor, rewritten on disk by a tool such as a coding agent, or deleted. Edited back to
-   that content (typing an "a" and deleting it), it shows the tick again. Binary files dash on any rewrite. A
-   ticked file you click once gets the dash too, to mark it for another look. A dashed file is still part of the
-   commit. Clicking a dashed file unticks it as usual, and ticking it again takes its current content as the new
-   baseline. Files the IDE ticks on its own, files ticked before the plugin saw the tree, and files ticked with the
-   keyboard get no baseline, so they never dash by themselves. Baselines and these flags live in memory only. A file
-   with only some of its lines included keeps the platform's own indeterminate box and is left alone. The cycle acts
-   on plain left clicks; modifier-clicks and Space go straight to the platform. *Dash Changed or Flagged Files* in
-   the tree's context menu switches the feature off.
-   Next to the number of files, each change list shows the lines added and removed (`+120 −34`), counted like the
-   diff viewer counts them (a changed line is one of each), unsaved edits included. Binary files and files over two
-   million characters count as zero. The pull request's change tree shows the same total on its top row (the
-   repository, module or folder with the file count), followed by the files it adds and deletes (`· 3 new · 1 deleted`), read from git at the compared revisions; opening the tree fetches the pull request's
-   commits, as opening a diff does. Theme keys: `BetterCodeReview.LineStats.added`,
-   `.deleted`.
-   The Commit panel's top row also shows the whole branch against develop (`vs develop +858 −8`): from where the
-   branch left `origin/develop` (or a local `develop`) up to the files on disk, so its commits and the work not
-   committed yet, read with `git diff --numstat`. Unsaved edits and files not added to git are left out. It shows
-   with no local changes too, so checking out a branch to review gives its size at once; on develop itself it is
-   hidden.
-   The project tree repeats the Commit panel's checkboxes in front of each changed or new file's icon, where a
-   folder has its expand arrow (one column further left on a file the tree can expand), with the same cycle and the
-   same dash. They show only while the Commit panel shows checkboxes.
-   Commit (Cmd+K) keeps the checkboxes as they were; without the plugin it ticks every change of the active
-   changelist.
+7. **Które przeczytane pliki zmieniły się znowu** - GitHub zdejmuje ptaszek „viewed”, gdy późniejszy commit zmieni
+   plik, a wbudowany plugin pokazuje wtedy tę samą kropkę co przy pliku nigdy nieotwartym. BetterJ rysuje w tym
+   miejscu kreskę: kropka = nieprzeczytany, ptaszek = przeczytany, kreska = przeczytany, ale zmieniony. Kliknięcia
+   przechodzą przez stany: zaznaczony plik po kliknięciu dostaje kreskę („przeczytaj jeszcze raz”), po kolejnym jest
+   odznaczony, po kolejnym zaznaczony. GitHub zna tylko „zaznaczony albo nie”, więc kreska po kliknięciu to własny
+   znacznik pluginu, trzymany per projekt i PR (500 ostatnich). Cykl działa na zwykłe kliknięcia lewym przyciskiem;
+   klawiatura i menu kontekstowe idą prosto do GitHuba. Klucze motywu: `BetterCodeReview.ViewedDismissed.dash`,
+   `.dashOnCurrent` (wiersz otwartego pliku) i `.dashInBox` (kreska w checkboxie).
+8. **Podwójny klik otwiera plik** - podwójny klik albo Enter na pliku w drzewie PR-a otwiera plik w edytorze, czego
+   potrzeba przy czytaniu na wybranym branchu; Alt+podwójny klik i *Show Diff* otwierają diff jak dotąd. Gdy branch
+   PR-a nie jest wybrany, otwiera się diff, a dymek mówi dlaczego (raz na drzewo). „Wybrany” dotyczy brancha, nie
+   tego, czy kopia robocza równa się głowie PR-a: niepobrane commity albo lokalne zmiany mogą przesunąć komentarze
+   do linii. Dotyczy tylko drzewa całego PR-a z GitHuba: w drzewie pojedynczego commita i w merge requeście GitLaba
+   otwiera się diff.
+9. **Okno Commit: które zaznaczone pliki się zmieniły** - plik zaznaczony kliknięciem w checkbox dostaje kreskę,
+   gdy jego treść różni się od tej z chwili zaznaczenia: zmieniony w edytorze, nadpisany na dysku przez narzędzie
+   (np. agenta AI) albo usunięty. Przywrócony do tamtej treści (dopisane „a” i usunięte) znowu ma ptaszek. Pliki
+   binarne dostają kreskę przy każdym zapisie. Zaznaczony plik kliknięty raz też dostaje kreskę, jako znak „do
+   ponownego przejrzenia”; plik z kreską dalej wchodzi do commitu. Kliknięcie w plik z kreską odznacza go, a ponowne
+   zaznaczenie bierze aktualną treść jako nową bazę. *Show Changes Since Tick* w menu kontekstowym okna Commit i
+   drzewa projektu otwiera diff: treść z chwili zaznaczenia po lewej, obecna po prawej (dla zaznaczeń sprzed
+   restartu IDE zostaje sama kreska). Pliki zaznaczone przez IDE albo klawiaturą nie mają bazy, więc
+   same nie dostają kreski. Plik z zaznaczoną tylko częścią linii zostawia własny checkbox platformy.
+   **Pamięć zaznaczeń:** ptaszki, kreski i treść z chwili zaznaczenia są zapisywane w pliku workspace projektu (nie
+   trafia do repo). Po restarcie IDE przez pierwsze 30 sekund plugin cofa zaznaczanie wszystkiego przez IDE; Twoje
+   pierwsze kliknięcie kończy ten czas. Plik zmieniony przy zamkniętym IDE dostaje kreskę. Commit (`⌘K`) zostawia
+   checkboxy tak, jak były; bez pluginu zaznacza wszystkie zmiany aktywnej listy.
+   **Liczniki linii:** obok liczby plików każda lista zmian pokazuje dodane i usunięte linie (`+120 −34`), liczone jak
+   w podglądzie diffu (zmieniona linia to jedna dodana i jedna usunięta), z niezapisanymi zmianami. Pliki binarne i
+   pliki ponad dwa miliony znaków liczą się jako zero. Drzewo PR-a pokazuje to samo w górnym wierszu, a po nim nowe
+   i usunięte pliki (`· 3 new · 1 deleted`), czytane z gita dla porównywanych rewizji; otwarcie drzewa pobiera
+   commity PR-a, tak jak otwarcie diffu. Klucze motywu: `BetterCodeReview.LineStats.added`, `.deleted`.
+   **Cały branch:** górny wiersz okna Commit pokazuje też cały branch względem jego bazy (`vs develop +858 −8`): od
+   miejsca, w którym branch od niej odszedł, do plików na dysku, czyli commity i to, czego jeszcze nie
+   zacommitowano (`git diff --numstat`). Niezapisane zmiany i pliki niedodane do gita są pominięte. Widać to też bez
+   lokalnych zmian, więc po przełączeniu na branch do review od razu znasz jego rozmiar; na samym develop jest
+   ukryte. Baza to branch, z którego wyrósł bieżący, czyli ten, któremu brakuje najmniej jego commitów: develop dla
+   zwykłego brancha, branch poniżej dla brancha w stosie (`vs ZT-847 +859 −9`). Przy remisie wygrywa develop, a kopia
+   zdalna (`origin/…`) z lokalną; git starszy niż 2.41 zawsze używa develop.
+   **Drzewo projektu** powtarza checkboxy okna Commit przed ikoną każdego zmienionego lub nowego pliku, z tym samym
+   cyklem i tą samą kreską. Widać je tylko wtedy, gdy okno Commit pokazuje checkboxy.
+10. **Kolory pakietów** - prawy klik na folderze albo pliku w drzewie projektu (lub na zakładce edytora) i kolor z
+    *Package Color*. Kolor jest tłem w drzewie projektu, w drzewach zmian (Commit, PR) i na zakładkach edytora, dla
+    folderu i wszystkiego w środku; zagnieżdżony folder może mieć własny kolor. Pliki w pokolorowanym pakiecie mają
+    też kolor za linią `package` w edytorze i po obu stronach diffu (Java, Kotlin, Scala, Groovy, Go). Plik w folderze
+    bez koloru (np. test obok pokolorowanego kodu w `src/main`) i starsza rewizja w diffie biorą kolor folderu, który
+    wskazuje ich pakiet. Paletę zmienisz w *Settings → Tools → Package
+    Colors* (nazwa i kolor z przezroczystością, wyłączenie linii `package`). Ustawienia leżą w
+    `.idea/betterCodeReviewColors.xml`. Przy pierwszym użyciu plugin importuje kolory i paletę pluginu *ProjectTree
+    Color Highlighter* z `.idea/highlightedFiles.xml`; tamten plugin potem odinstaluj, bo przy obu jego kolory
+    wygrywają.
+11. **Kod na środku okna** - *Center code on window* trzyma kolumnę kodu (do prawego marginesu) na środku okna IDE,
+    a nie edytora, więc otwarcie albo zmiana szerokości panelu z boku nie przesuwa kodu. Edytor dostaje pusty pas po
+    lewej stronie numerów linii, zwężany, gdy panel zostawia za mało miejsca; zmiana miejsca kodu jest płynna. Pas
+    liczy się w trakcie układania edytora, w tym samym kroku co przesunięcie, dlatego funkcja włącza tryb *Center
+    View* IntelliJ z jego własnym marginesem ustawionym na 0 (*Advanced Settings*, `editor.distraction.free.margin`).
+    Wyłączenie funkcji przywraca oba ustawienia. Domyślnie wyłączone. Duże zmiany pasa trafiają do `idea.log` jako
+    `Center on window:`.
 
-10. **Package colours** - right-click a folder or file in the project tree (or an editor tab) and pick a colour under
-   *Package Color*. The colour shows as the background in the project tree, in the change trees (Commit, pull request)
-   and on the editor tabs, for the folder and everything inside it; a nested folder may get its own colour. Files in a
-   coloured package also get the colour behind their `package` line in the editor (Java, Kotlin, Scala, Groovy, Go), so
-   the editor tells which part of the project you are in. The palette is yours: *Settings | Tools | Package Colors*
-   edits each colour's name and value (with transparency) and switches the package line off. Settings live in
-   `.idea/betterCodeReviewColors.xml`. On first use the plugin imports the assignments and the palette of the
-   *ProjectTree Color Highlighter* plugin from `.idea/highlightedFiles.xml`; uninstall that plugin afterwards, since
-   with both installed its colours win.
+## Wymagania
 
-## Requirements
+- IntelliJ IDEA 2026.1–2026.3 (buildy 261–263) z włączonymi wbudowanymi pluginami *GitHub* i *Git*.
+- Konto GitHub dodane w *Settings → Version Control → GitHub* (wysyłanie załączników używa jego tokenu).
+- Załączniki: tylko github.com. GitHub Enterprise nie jest obsługiwany, ma inny adres wysyłania.
 
-- IntelliJ IDEA 2026.1 to 2026.3 (builds 261 to 263) with the bundled *GitHub* and *Git* plugins enabled.
-- A GitHub account configured in *Settings | Version Control | GitHub* (the upload reuses its token).
-- Attachments: github.com only. GitHub Enterprise is not supported, the upload endpoint differs.
+## Wersje i wydania
 
+- `main` trzyma zatwierdzone zmiany pluginu. Nie każdy push jest wydaniem.
+- Wydanie to push, który podnosi też `version` w `build.gradle.kts`, dodaje wpis do [CHANGELOG.md](CHANGELOG.md) i
+  uruchamia `scripts/release.sh`: skrypt buduje `dist/BetterJ-<wersja>.zip`, usuwa poprzedni zip i przestawia linki
+  do pobrania oraz wersję na górze tego pliku.
+- Każdy build dany do testów ma własny numer: poprawka podnosi ostatnią część (`0.20.0` → `0.20.1`), nowe funkcje
+  środkową. Dwa różne zipy nigdy nie mają tej samej wersji.
 
-## Versions and releases
-
-- `main` holds the changes approved for the plugin. Not every push is a release.
-- A release is a push that also bumps `version` in `build.gradle.kts`, adds an entry to [CHANGELOG.md](CHANGELOG.md)
-  and runs `scripts/release.sh`: it builds `dist/BetterJ-<version>.zip`, removes the previous zip and points the
-  download links and the version at the top of this file to the new one.
-
-## Build from source
+## Budowanie ze źródeł
 
 ```bash
-JAVA_HOME=<JDK 21 or newer> ./gradlew buildPlugin
+JAVA_HOME=<JDK 21 lub nowszy> ./gradlew buildPlugin
 ```
 
-The zip lands in `build/distributions/` (`BetterJ-<version>.zip`). `gradle.properties` points `platformLocalPath`
-at a local IDE so the build needs no 1 GB download; remove the property to build against a downloaded IntelliJ IDEA
-Community 2026.1.
+Zip ląduje w `build/distributions/` (`BetterJ-<wersja>.zip`). `scripts/install-local.sh` buduje plugin i od razu
+instaluje go w lokalnym IntelliJ IDEA: zamyka IDE jak ⌘Q, podmienia folder `BetterJ` w katalogu pluginów i otwiera IDE
+z tymi samymi projektami (`--no-build` instaluje ostatnio zbudowany zip, `IDEA_APP` / `IDEA_CONFIG` wskazują inne IDE). `gradle.properties` wskazuje w `platformLocalPath`
+lokalne IDE, więc build nie pobiera 1 GB; usuń tę właściwość, żeby budować na pobranym IntelliJ IDEA Community 2026.1.
 
-Tests: `./gradlew test` (unit tests plus platform tests in a headless IDE sandbox). `./gradlew verifyPlugin` checks
-compatibility with 2026.1, 2026.2 and 2026.3.
+Testy: `./gradlew test` (testy jednostkowe i testy platformy w IDE bez okna). `./gradlew verifyPlugin` sprawdza
+zgodność z 2026.1, 2026.2 i 2026.3.
 
-## Caveats
+## Zastrzeżenia
 
-- The attachment upload uses `uploads.github.com/user-attachments/assets`, which GitHub does not document.
-  It is the same endpoint the web UI's attachment box uses and it accepts the IDE's OAuth token today; if GitHub
-  changes it, pasting falls back to an error balloon and nothing is lost (the placeholder is removed).
-- The plugin hooks into internal UI details of the GitHub plugin (the name of the HTML pane that renders a
-  comment, the `Dummy.md` file behind the comment editor, the layout of the comment field's action row).
-  A major IDE update may need a small follow-up.
-- Uploads go to github.com only; a GitHub Enterprise account gets an error balloon instead.
-- The current-file mark is a transparent overlay added to the change tree, recognised by the class name of the
-  tree the collaboration tools build; an IDE update may need a follow-up.
-- The pending-comment marks and the viewed-state dash read the pull request's review data through private fields of
-  the change list model (the data itself comes from public, cached flows, so no extra requests are made). When the
-  fields are not where the plugin expects them, the marks stay off and the IDE log says so at INFO level
-  ("Tree marks ..."). Both work only in the tree of the whole pull request, not in the tree of a single commit.
-- The click cycles intercept checkbox clicks at the toolkit level, before the trees' own click handlers, and the
-  pull request tree's viewed-state toggle (which ignores consumed events) is rewrapped to respect them. Both are
-  undone when the plugin unloads.
-- The *Review…* button is recognised by the shape of the details action row, which GitLab merge requests share;
-  it is only added where a GitHub pull request is in the context. The submit flow reuses the GitHub plugin's
-  review model through its pluggable popup handler, an internal API.
-- Reactions on comments stay limited to the eight GitHub allows; that is a GitHub API limit, not an IDE one.
+- Wysyłanie załączników używa `uploads.github.com/user-attachments/assets`, którego GitHub nie dokumentuje. To ten
+  sam adres, którego używa strona github.com, i dziś przyjmuje token OAuth z IDE; jeśli GitHub go zmieni, wklejanie
+  pokaże dymek z błędem i nic nie przepadnie (zastępczy tekst zostanie usunięty).
+- Plugin korzysta z wewnętrznych szczegółów interfejsu pluginu GitHub (nazwa panelu HTML komentarza, plik
+  `Dummy.md` pod polem komentarza, układ przycisków pod polem). Duża aktualizacja IDE może wymagać drobnej poprawki.
+- Znacznik otwartego pliku to przezroczysta nakładka na drzewo zmian, rozpoznawana po nazwie klasy drzewa;
+  aktualizacja IDE może wymagać poprawki.
+- Znaczniki niewysłanych komentarzy i kreska „viewed” czytają dane review przez prywatne pola modelu listy zmian
+  (same dane pochodzą z publicznych, buforowanych strumieni, więc nie ma dodatkowych zapytań). Gdy pól nie ma tam,
+  gdzie plugin ich szuka, znaczniki się wyłączają, a log IDE mówi o tym na poziomie INFO („Tree marks ...”). Oba
+  działają tylko w drzewie całego PR-a, nie pojedynczego commita.
+- Cykle kliknięć przechwytują kliknięcia w checkboxy na poziomie toolkitu, przed własnymi obsługami drzew. Wszystko
+  jest cofane, gdy plugin się wyłącza.
+- Przycisk *Review…* jest rozpoznawany po kształcie wiersza akcji w szczegółach, który mają też merge requesty
+  GitLaba; jest dodawany tylko tam, gdzie w kontekście jest PR z GitHuba. Wysyłanie review korzysta z modelu review
+  pluginu GitHub przez jego wymienne okno, czyli wewnętrzne API.
+- Reakcje na komentarze są ograniczone do ośmiu, na które pozwala GitHub; to limit API GitHuba, nie IDE.

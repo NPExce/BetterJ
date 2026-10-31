@@ -2,7 +2,6 @@ package pl.adrros.bettercodereview.review.files
 
 import com.intellij.collaboration.ui.codereview.details.model.CodeReviewChangeListViewModel
 import com.intellij.collaboration.util.RefComparisonChange
-import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ToggleAction
@@ -14,6 +13,7 @@ import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewed
 import java.awt.Point
 import java.awt.event.MouseEvent
 import java.awt.event.MouseListener
+import pl.adrros.bettercodereview.settings.Feature
 
 private val LOG = logger<ViewedStateCycle>()
 
@@ -27,11 +27,11 @@ private val LOG = logger<ViewedStateCycle>()
 object ViewedStateCycle {
     // 2026.1 names the listener installViewedStateToggleHandler$1, 2026.3 installRendererComponentClickHandler$1 (also used for jump-to-source, harmless to wrap).
     private const val NATIVE_TOGGLE = "com.intellij.collaboration.ui.codereview.CodeReviewProgressTreeModelKt\$install"
-    private const val SETTING = "BetterCodeReview.viewedCheckboxCycle"
-
     var isEnabled: Boolean
-        get() = PropertiesComponent.getInstance().getBoolean(SETTING, true)
-        set(value) = PropertiesComponent.getInstance().setValue(SETTING, value, true)
+        get() = Feature.VIEWED_CYCLE.isOn
+        set(value) {
+            Feature.VIEWED_CYCLE.isOn = value
+        }
 
     enum class Step {
         /** Let the platform untick the file, and flag it: the row shows the dash. */

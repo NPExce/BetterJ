@@ -19,15 +19,18 @@
                 shows a dash in its checkbox, the file open in the editor gets the same purple mark as in the pull request's tree, and clicking a ticked file first shows the dash, then unticks it; the file stays in
                 the commit while dashed; edited back to the content it was ticked with, it shows the tick again. Next to the number of changed files the change list shows the lines added and removed. Both click cycles can be switched off in the trees' context menus.</li>
             <li>Line counts: the pull request's tree shows the lines added and removed next to its file count, and the Commit
-                window shows the whole branch against develop (its commits plus the work not committed yet).</li>
+                window shows the whole branch against develop, or the branch below it in a stack (its commits plus the work not committed yet).</li>
             <li>The Commit window's checkboxes also show in the project tree, in front of each changed file, and Commit (Cmd+K)
                 keeps them as they were instead of ticking every change.</li>
             <li>Colour folders and files of the project (Package Color in the project tree's and editor tab's context menus):
                 the colour shows in the project tree, the change trees and the editor tabs, and as the background of the
-                package line of files inside. The palette is yours to edit in Settings | Tools | Package Colors; settings
+                package line of files inside, in the editor and in diffs. The palette is yours to edit in Settings | Tools | Package Colors; settings
                 of the ProjectTree Color Highlighter plugin (.idea/highlightedFiles.xml) are imported on first use.</li>
             <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
                 checked out); Alt+double-click opens the diff as before. Switchable in the tree's context menu.</li>
+            <li>Center Code on Window (View | Appearance): the code stays in the middle of the IDE window, not of the
+                editor, when tool windows open on one side.</li>
+            <li>Every feature can be switched on and off in Tools | BetterJ or Settings | Tools | BetterJ.</li>
         </ul>
     ]]></description>
 
@@ -61,7 +64,11 @@
 
         <editorTabColorProvider implementation="pl.adrros.bettercodereview.colors.PackageColorProvider"/>
         <editorFactoryListener implementation="pl.adrros.bettercodereview.colors.PackageLines$EditorListener"/>
+        <editorFactoryListener implementation="pl.adrros.bettercodereview.editor.WindowCenteredCode$EditorListener"/>
         <editorFactoryDocumentListener implementation="pl.adrros.bettercodereview.colors.PackageLines$EditListener"/>
+        <applicationConfigurable parentId="tools" id="BetterCodeReview.Features"
+                                 instance="pl.adrros.bettercodereview.settings.FeaturesConfigurable"
+                                 key="features.settings" bundle="messages.BetterCodeReviewBundle"/>
         <projectConfigurable parentId="tools" id="BetterCodeReview.PackageColors"
                              instance="pl.adrros.bettercodereview.colors.PackageColorsConfigurable"
                              key="packageColors.settings" bundle="messages.BetterCodeReviewBundle"/>
@@ -121,10 +128,27 @@
             <add-to-group group-id="Github.PullRequest.Changes.Popup" anchor="last"/>
         </action>
 
+        <action id="BetterCodeReview.ShowChangesSinceTick"
+                class="pl.adrros.bettercodereview.commit.ShowChangesSinceTick" icon="AllIcons.Actions.Diff">
+            <add-to-group group-id="ChangesViewPopupMenu" anchor="first"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="ProjectViewPopupMenuRefactoringGroup"/>
+        </action>
+
         <action id="BetterCodeReview.CommitCheckboxMarks"
                 class="pl.adrros.bettercodereview.commit.CommitInclusionMarks$ToggleMarksAction">
             <add-to-group group-id="ChangesViewPopupMenu" anchor="last"/>
         </action>
+
+        <action id="BetterCodeReview.WindowCenteredCode"
+                class="pl.adrros.bettercodereview.editor.WindowCenteredCode$ToggleCenterAction">
+            <add-to-group group-id="UIToggleActions" anchor="last"/>
+        </action>
+
+        <group id="BetterCodeReview.Features"
+               class="pl.adrros.bettercodereview.settings.FeaturesMenu"
+               popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </group>
 
         <group id="BetterCodeReview.PackageColor"
                class="pl.adrros.bettercodereview.colors.PackageColorActionGroup"

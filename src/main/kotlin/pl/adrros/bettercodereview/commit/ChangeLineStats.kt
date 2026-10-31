@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.Color
 import java.util.concurrent.ConcurrentHashMap
+import pl.adrros.bettercodereview.settings.Feature
 
 private val LOG = logger<ChangeLineStats>()
 
@@ -158,7 +159,7 @@ class ChangeLineStats(private val project: Project, private val scope: Coroutine
     class Decorator(private val project: Project) : ChangeListDecorator {
         override fun decorateChangeList(changeList: LocalChangeList, renderer: ColoredTreeCellRenderer, selected: Boolean, expanded: Boolean, hasFocus: Boolean) {
             val changes = changeList.changes
-            if (changes.isEmpty()) return
+            if (changes.isEmpty() || !Feature.LINE_COUNTS.isOn) return
             val lines = project.service<ChangeLineStats>().totalFor(changes) ?: return
             if (lines.added == 0 && lines.deleted == 0) return
             // On the focused selection the row's own foreground keeps the text readable.

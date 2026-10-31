@@ -2,7 +2,6 @@ package pl.adrros.bettercodereview.review.files
 
 import com.intellij.collaboration.util.RefComparisonChange
 import com.intellij.ide.DataManager
-import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -28,6 +27,7 @@ import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 import javax.swing.JTree
+import pl.adrros.bettercodereview.settings.Feature
 
 private val LOG = logger<TreeOpensFile>()
 
@@ -41,11 +41,11 @@ private val LOG = logger<TreeOpensFile>()
  * menu turns the feature off.
  */
 object TreeOpensFile {
-    private const val SETTING = "BetterCodeReview.doubleClickOpensFile"
-
     var isEnabled: Boolean
-        get() = PropertiesComponent.getInstance().getBoolean(SETTING, true)
-        set(value) = PropertiesComponent.getInstance().setValue(SETTING, value, true)
+        get() = Feature.DOUBLE_CLICK_OPENS.isOn
+        set(value) {
+            Feature.DOUBLE_CLICK_OPENS.isOn = value
+        }
 
     enum class BranchState { CHECKED_OUT, OTHER, UNKNOWN }
 

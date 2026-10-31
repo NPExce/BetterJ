@@ -24,36 +24,38 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JTree
+import pl.adrros.bettercodereview.settings.Feature
 
 private val LOG = logger<BranchLineStats>()
 
 /**
- * Lines added and removed on the whole branch: from where it left develop up to the files on disk, so its commits
- * and the work not committed yet. Read with git, so unsaved edits and files not yet added to git are left out.
+ * Lines added and removed on the whole branch: from where it left its base up to the files on disk, so its commits
+ * and the work not committed yet. The base is the branch it grew from: develop, or the previous branch of a stack.
+ * Read with git, so unsaved edits and files not yet added to git are left out.
  * Shown on the Commit panel's top row, next to the change list's own total, and also when nothing is changed locally.
  */
 @Service(Service.Level.PROJECT)
 class BranchLineStats(private val project: Project, private val scope: CoroutineScope) {
     @Volatile
-    private var lines: ChangeLineStats.Lines? = null
+    private var total: Total? = null
 
     @Volatile
     private var computedFor: Any? = null
     private val running = AtomicBoolean()
 
-    /** Replaceable in tests; runs on a background thread. Null when no repository has develop or HEAD is on develop itself. */
-    var compute: suspend () -> ChangeLineStats.Lines? = { withGit() }
+    /** Replaceable in tests; runs on a background thread. Null when no repository has a base or HEAD is on develop itself. */
+    var compute: suspend () -> Total? = { withGit() }
 
     /** Called when a count arrives; repaints the Commit panel. */
     var onComputed: () -> Unit = { CommitInclusionMarks.repaintAll() }
 
     /** The last count, recounted in the background once [signature] (the Commit panel's model, a minute) moves on. */
-    fun totalFor(signature: Any): ChangeLineStats.Lines? {
+    fun totalFor(signature: Any): Total? {
         if (signature != computedFor && running.compareAndSet(false, true)) {
             scope.launch(Dispatchers.IO) {
                 try {
                     delay(DEBOUNCE_MS)
-                    lines = compute()
+                    total = compute()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
@@ -65,19 +67,30 @@ class BranchLineStats(private val project: Project, private val scope: Coroutine
                 withContext(Dispatchers.EDT) { onComputed() }
             }
         }
-        return lines
+        return total
     }
 
-    private suspend fun withGit(): ChangeLineStats.Lines? {
-        var total: ChangeLineStats.Lines? = null
+    private suspend fun withGit(): Total? {
+        val bases = mutableListOf<String>()
+        var lines: ChangeLineStats.Lines? = null
         for (root in readAction { gitRoots() }) {
-            if (git(root, GitCommand.REV_PARSE, "--abbrev-ref", "HEAD")?.firstOrNull() == BASE) continue
-            val base = BASE_REFS.firstOrNull { git(root, GitCommand.REV_PARSE, "--verify", "--quiet", it) != null } ?: continue
-            val mergeBase = git(root, GitCommand.MERGE_BASE, base, "HEAD")?.firstOrNull()?.trim() ?: continue
+            val current = git(root, GitCommand.REV_PARSE, "--abbrev-ref", "HEAD")?.firstOrNull() ?: continue
+            if (current == BASE) continue
+            val base = nearestBase(root, current) ?: continue
+            val mergeBase = git(root, GitCommand.MERGE_BASE, base.ref, "HEAD")?.firstOrNull()?.trim() ?: continue
             val numstat = git(root, GitCommand.DIFF, "--numstat", mergeBase) ?: continue
-            total = (total ?: ChangeLineStats.Lines(0, 0)) + parseNumstat(numstat)
+            lines = (lines ?: ChangeLineStats.Lines(0, 0)) + parseNumstat(numstat)
+            bases += base.name
         }
-        return total
+        return lines?.let { Total(bases.distinct().joinToString(", "), it) }
+    }
+
+    /** The branch HEAD grew from, or develop when git is too old to rank branches (before 2.41). */
+    private fun nearestBase(root: VirtualFile, current: String): Base? {
+        val refs = git(root, GitCommand.FOR_EACH_REF, "--format=$RANK_FORMAT", "refs/heads", "refs/remotes/origin")
+        if (refs != null) return pickBase(refs, current)
+        val ref = BASE_REFS.firstOrNull { git(root, GitCommand.REV_PARSE, "--verify", "--quiet", it) != null } ?: return null
+        return Base(ref, BASE)
     }
 
     /**
@@ -97,10 +110,11 @@ class BranchLineStats(private val project: Project, private val scope: Coroutine
         return if (result.success()) result.output.filter { it.isNotBlank() } else null
     }
 
-    /** "vs develop +858 −8" right after the tree's top row, or at its top left while the tree is empty. */
+    /** "vs develop +858 −8" (or the stack's previous branch) right after the tree's top row, or at its top left while the tree is empty. */
     fun paint(g: Graphics, tree: JTree) {
+        if (!Feature.LINE_COUNTS.isOn) return
         // The Commit panel rebuilds its model after every refresh of the local changes, a commit and a checkout included.
-        val total = totalFor(listOf(System.identityHashCode(tree.model), System.currentTimeMillis() / REFRESH_MS)) ?: return
+        val (base, total) = totalFor(listOf(System.identityHashCode(tree.model), System.currentTimeMillis() / REFRESH_MS)) ?: return
         if (total.added == 0 && total.deleted == 0) return
         val g2 = g.create() as Graphics2D
         try {
@@ -113,7 +127,7 @@ class BranchLineStats(private val project: Project, private val scope: Coroutine
             // On the focused selection the row's own foreground keeps the text readable.
             val onSelection = top != null && tree.isRowSelected(0) && tree.hasFocus()
             val parts = listOf(
-                "vs $BASE " to SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor,
+                "vs $base " to SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor,
                 "+${total.added}" to ChangeLineStats.ADDED,
                 " −${total.deleted}" to ChangeLineStats.DELETED,
             )
@@ -127,8 +141,34 @@ class BranchLineStats(private val project: Project, private val scope: Coroutine
         }
     }
 
+    /** The branch total and the base it is counted from. */
+    data class Total(val base: String, val lines: ChangeLineStats.Lines)
+
+    /** A base as git names it ([ref]) and as the panel shows it ([name], without `origin/`). */
+    data class Base(val ref: String, val name: String)
+
     companion object {
         const val BASE = "develop"
+        private const val REMOTE = "origin/"
+
+        /** Per branch: commits it lacks of HEAD's, the branch, and the target of a symbolic ref such as origin/HEAD. */
+        private const val RANK_FORMAT = "%(ahead-behind:HEAD)\t%(refname:short)\t%(symref)"
+
+        /**
+         * The branch with the fewest of HEAD's commits missing, from `git for-each-ref` lines in [RANK_FORMAT]: the one
+         * HEAD grew from. A stacked branch gets the branch below it, any other one develop. Ties go to develop, then to
+         * the remote copy. HEAD's own branch, its remote copy, symbolic refs and branches holding HEAD (the stack's upper
+         * branches) are skipped; develop holding HEAD is kept, it is the base of a branch with no commits yet.
+         */
+        fun pickBase(lines: List<String>, current: String): Base? = lines.mapNotNull { line ->
+            val parts = line.split('\t')
+            val behind = parts.getOrNull(0)?.split(' ')?.getOrNull(1)?.toIntOrNull()
+            val ref = parts.getOrNull(1).orEmpty()
+            val name = ref.removePrefix(REMOTE)
+            if (behind == null || (behind == 0 && name != BASE) || ref.isEmpty() || parts.getOrNull(2).orEmpty().isNotEmpty() || name == current) null
+            else Triple(behind, ref, name)
+        }.minWithOrNull(compareBy({ it.first }, { it.third != BASE }, { !it.second.startsWith(REMOTE) }))
+            ?.let { Base(it.second, it.third) }
 
         /** The remote branch first: it moves with every fetch, while a local develop is often left behind. */
         private val BASE_REFS = listOf("origin/$BASE", BASE)

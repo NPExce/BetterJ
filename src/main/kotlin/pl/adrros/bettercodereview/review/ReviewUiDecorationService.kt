@@ -97,6 +97,12 @@ class ReviewUiDecorationService : Disposable {
         }
         EditorFactory.getInstance().allEditors.forEach { editor -> guarded { ReviewCommentEditorListener.decorate(editor) } }
         com.intellij.openapi.project.ProjectManager.getInstance().openProjects.forEach { project -> guarded { pl.adrros.bettercodereview.colors.PackageLines.refreshAll(project) } }
+        guarded {
+            if (pl.adrros.bettercodereview.editor.WindowCenteredCode.isEnabled) {
+                pl.adrros.bettercodereview.editor.WindowCenteredCode.ensureIdeMode()
+                pl.adrros.bettercodereview.editor.WindowCenteredCode.refreshAll()
+            }
+        }
     }
 
     /**
@@ -113,6 +119,7 @@ class ReviewUiDecorationService : Disposable {
         guarded { CommitInclusionMarks.uninstallAll() }
         guarded { pl.adrros.bettercodereview.commit.ProjectTreeTicks.uninstallAll() }
         guarded { pl.adrros.bettercodereview.colors.PackageLines.removeAll() }
+        guarded { pl.adrros.bettercodereview.editor.WindowCenteredCode.removeAll() }
         guarded {
             for (window in Window.getWindows()) {
                 for (component in UIUtil.uiTraverser(window).filter(JComponent::class.java)) {

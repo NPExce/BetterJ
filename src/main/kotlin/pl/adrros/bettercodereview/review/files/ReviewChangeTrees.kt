@@ -39,6 +39,7 @@ import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.swing.JComponent
 import javax.swing.JTree
+import pl.adrros.bettercodereview.settings.Feature
 
 /**
  * Marks the file open in the editor inside the pull request's change tree, so the reader always knows which
@@ -353,7 +354,7 @@ object ReviewChangeTrees {
                 val nodePath = pathOf(TreeUtil.getLastUserObject(path)) ?: continue
                 val bounds = tree.getRowBounds(row) ?: continue
                 val rowRect = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
-                val isCurrent = current != null && !nodePath.isDirectory && nodePath == current
+                val isCurrent = current != null && !nodePath.isDirectory && nodePath == current && Feature.CURRENT_FILE.isOn
                 if (isCurrent) marked = rowRect // remembered even outside the clip, so a partial repaint keeps the pulse alive
                 if (clip != null && !clip.intersects(rowRect)) continue
                 val pending = pendingCountFor(path, nodePath)
@@ -477,6 +478,7 @@ object ReviewChangeTrees {
          * branch or the module's path). The file kinds show at once; the line counts once git has been read.
          */
         private fun paintLineTotal(g: Graphics, node: ChangesBrowserNode<*>, row: Int, bounds: Rectangle) {
+            if (!Feature.LINE_COUNTS.isOn) return
             val lines = lineTotalOf(node)?.takeIf { it.added != 0 || it.deleted != 0 }
             val (created, deleted) = fileKindsOf(node)
             val separator = " · " to com.intellij.ui.SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor

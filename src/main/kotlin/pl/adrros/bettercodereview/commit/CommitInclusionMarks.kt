@@ -1,6 +1,5 @@
 package pl.adrros.bettercodereview.commit
 
-import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -45,6 +44,12 @@ import java.util.WeakHashMap
 import javax.swing.JComponent
 import javax.swing.JTree
 import javax.swing.tree.TreePath
+import pl.adrros.bettercodereview.settings.Feature
+
+private val LOG = com.intellij.openapi.diagnostic.logger<CommitInclusionMarks>()
+
+/** How long after the Commit panel appears the saved ticks are put back over the IDE's own "tick everything". */
+private const val RESTORE_WINDOW_MS = 30_000L
 
 /**
  * The Commit tool window's checkboxes say which files go into the commit. The plugin adds a third look to them:
@@ -57,11 +62,12 @@ import javax.swing.tree.TreePath
  */
 object CommitInclusionMarks {
     const val INSTALLED = "BetterCodeReview.commitMarks"
-    private const val SETTING = "BetterCodeReview.commitCheckboxMarks"
 
     var isEnabled: Boolean
-        get() = PropertiesComponent.getInstance().getBoolean(SETTING, true)
-        set(value) = PropertiesComponent.getInstance().setValue(SETTING, value, true)
+        get() = Feature.COMMIT_MARKS.isOn
+        set(value) {
+            Feature.COMMIT_MARKS.isOn = value
+        }
 
     private val installed: MutableSet<JTree> = Collections.newSetFromMap(WeakHashMap())
 
@@ -151,11 +157,21 @@ object CommitInclusionMarks {
         }
     }
 
-    private fun digestOf(path: FilePath): ByteArray? =
-        contentOf(path)?.let { MessageDigest.getInstance("SHA-256").digest(it.toString().toByteArray(Charsets.UTF_8)) }
+    private fun digestOf(path: FilePath): ByteArray? = contentOf(path)?.let { digestOf(it.toString()) }
 
-    /** The content a file was ticked with: its stamps, to skip the comparison while nothing was written, and a digest of its text. */
-    private class Baseline(val stamp: Stamp, val digest: ByteArray?)
+    private fun digestOf(text: String): ByteArray = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
+
+    /** Longer texts keep only their digest: they still dash, but show no diff. */
+    private const val KEPT_TEXT_CHARS = 2_000_000
+
+    /**
+     * The content a file was ticked with: its stamps, to skip the comparison while nothing was written, a digest of its
+     * text, and the text itself for the diff since the tick (null after a restart or for a very long file).
+     */
+    private class Baseline(val stamp: Stamp, val digest: ByteArray?, val text: String? = null)
+
+    /** The stamp of a baseline saved before a restart: any stamp differs from it, so the digest decides. */
+    private val UNKNOWN_STAMP = Stamp(-2, -2, -2)
 
     /** The file a node stands for: a change by its path after the change (before it, when deleted); ChangesUtil moves between IDE versions, so the revisions are read directly. */
     fun pathOf(userObject: Any?): FilePath? = when (userObject) {
@@ -187,8 +203,20 @@ object CommitInclusionMarks {
         private var listening: Disposable? = null
 
         private val inclusionListener = object : InclusionListener {
-            override fun inclusionChanged() = ProjectTreeTicks.repaintAll()
+            override fun inclusionChanged() {
+                restoreTicks()
+                saveTicks()
+                ProjectTreeTicks.repaintAll()
+            }
         }
+
+        private val savedTicks: CommitTicks get() = tree.project.service()
+
+        /** The ticks saved before the restart, put back until the developer clicks a checkbox or the window passes. */
+        private var pendingTicks: Map<String, CommitTicks.Tick>? = null
+        private var pendingUntil = 0L
+        private var restoring = false
+        private var baselinesRestored = false
 
         val resizeListener = object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) = fitTree()
@@ -209,8 +237,13 @@ object CommitInclusionMarks {
             if (listening != null) return
             val disposable = Disposer.newDisposable("BetterCodeReview.commitMarks").also { listening = it }
             Disposer.register(tree.project, disposable)
+            if (CommitInclusionMarks.isEnabled) {
+                pendingTicks = savedTicks.ticks?.associateBy { it.path }
+                pendingUntil = System.currentTimeMillis() + RESTORE_WINDOW_MS
+            }
             val modelListener = java.beans.PropertyChangeListener {
                 items = null
+                restoreTicks()
                 ProjectTreeTicks.repaintAll()
             }
             tree.addPropertyChangeListener(JTree.TREE_MODEL_PROPERTY, modelListener)
@@ -230,6 +263,7 @@ object CommitInclusionMarks {
                     if (events.any { event -> baselines.keys.any { it.path == event.path } }) repaintIfShowing()
                 }
             })
+            restoreTicks()
         }
 
         override fun removeNotify() {
@@ -259,6 +293,60 @@ object CommitInclusionMarks {
         /** Fully ticked, not the platform's own "[-]" of a file with only some lines included. */
         private fun isTicked(userObject: Any): Boolean = tree.inclusionModel.getInclusionState(userObject) == ThreeStateCheckBox.State.SELECTED
 
+        /** The developer took over: the saved ticks no longer override the IDE's. */
+        private fun endRestoring() {
+            pendingTicks = null
+        }
+
+        /** Unticks what was not ticked before the restart and ticks what was, with the content each tick was given. */
+        private fun restoreTicks() {
+            val pending = pendingTicks ?: return
+            if (restoring) return
+            if (System.currentTimeMillis() > pendingUntil) return endRestoring()
+            val all = itemsByPath()
+            if (all.isEmpty()) return
+            val model = tree.inclusionModel
+            val drop = all.filterKeys { it !in pending }.values.filter { model.getInclusionState(it) != ThreeStateCheckBox.State.NOT_SELECTED }
+            val keep = all.filterKeys { it in pending }.values.filter { model.getInclusionState(it) != ThreeStateCheckBox.State.SELECTED }
+            if (!baselinesRestored) {
+                baselinesRestored = true
+                for ((path, item) in all) {
+                    val tick = pending[path] ?: continue
+                    val filePath = pathOf(item) ?: continue
+                    tickedByClick.add(filePath)
+                    if (tick.flagged) flagged.add(filePath)
+                    if (tick.digest.isNotEmpty()) baselines[filePath] = Baseline(UNKNOWN_STAMP, java.util.HexFormat.of().parseHex(tick.digest))
+                }
+                LOG.info("Commit ticks: put back ${pending.size} saved tick(s) over ${all.size} change(s)")
+            }
+            if (drop.isEmpty() && keep.isEmpty()) return
+            restoring = true
+            try {
+                if (drop.isNotEmpty()) model.removeInclusion(drop)
+                if (keep.isNotEmpty()) model.addInclusion(keep)
+            } finally {
+                restoring = false
+            }
+        }
+
+        /** Keeps the ticks for the next start, once the saved ones are back in place. */
+        private fun saveTicks() {
+            if (pendingTicks != null || restoring || !CommitInclusionMarks.isEnabled || items == null && itemsByPath().isEmpty()) return
+            val hex = java.util.HexFormat.of()
+            val ticked = tree.includedSet.filter { isTicked(it) }.mapNotNull { pathOf(it) }
+            savedTicks.save(ticked.map { CommitTicks.Tick(it.path, baselines[it]?.digest?.let(hex::formatHex).orEmpty(), it in flagged) })
+        }
+
+        private fun itemsByPath(): Map<String, Any> {
+            if (items == null) {
+                items = (tree.model.root as? ChangesBrowserNode<*>)?.traverseObjectsUnder()
+                    ?.filter { pathOf(it)?.isDirectory == false }
+                    ?.toList()?.associateBy { pathOf(it)!!.path }
+                    .orEmpty()
+            }
+            return items.orEmpty()
+        }
+
         /** Brings the baselines in line with what is ticked now: clicked ticks take a baseline, removed ticks drop it and the flag. */
         fun syncInclusion() {
             if (items == null) {
@@ -273,8 +361,12 @@ object CommitInclusionMarks {
             flagged.retainAll(included)
             tickedByClick.retainAll(included)
             for (path in tickedByClick) {
-                if (path !in baselines) stampOf(path)?.let { baselines[path] = Baseline(it, digestOf(path)) }
+                if (path !in baselines) stampOf(path)?.let { stamp ->
+                    val text = contentOf(path)?.toString()
+                    baselines[path] = Baseline(stamp, text?.let(::digestOf), text?.takeIf { it.length <= KEPT_TEXT_CHARS })
+                }
             }
+            saveTicks()
         }
 
         /** The dash shows on a ticked file that is flagged or whose content differs from its baseline (a deletion counts). */
@@ -290,6 +382,9 @@ object CommitInclusionMarks {
         }
 
         fun isFlagged(path: FilePath): Boolean = path in flagged
+
+        /** The text [path] had when it was ticked, while the commit still includes it; null when it was not kept. */
+        fun tickedText(path: String): String? = baselines.entries.firstOrNull { it.key.path == path }?.value?.text
 
         /** The current-file mark shows with or without checkboxes; the dashes only while the Commit panel shows checkboxes. */
         override fun paintComponent(g: Graphics) {
@@ -314,7 +409,7 @@ object CommitInclusionMarks {
                     val userObject = TreeUtil.getLastUserObject(path) ?: continue
                     val filePath = pathOf(userObject) ?: continue
                     val rowRect = Rectangle(visible.x, bounds.y, visible.width, bounds.height)
-                    val isCurrent = current != null && !filePath.isDirectory && filePath == current
+                    val isCurrent = current != null && !filePath.isDirectory && filePath == current && Feature.CURRENT_FILE.isOn
                     if (isCurrent) marked = rowRect // remembered even outside the clip, so a partial repaint keeps the pulse alive
                     if (clip != null && !clip.intersects(rowRect)) continue
                     if (isCurrent) mark.paint(g, bounds, visible)
@@ -339,6 +434,7 @@ object CommitInclusionMarks {
             val filePath = pathOf(userObject) ?: return null
             val slot = RowSlots.stateSlot(tree, path, row) ?: return null
             if (!slot.bounds.contains(point)) return null
+            endRestoring()
             syncInclusion()
             val state = tree.inclusionModel.getInclusionState(userObject)
             return when {
@@ -388,6 +484,7 @@ object CommitInclusionMarks {
 
         /** A click on the project tree's checkbox, with the Commit panel's cycle: tick (taking a baseline), mark, untick. */
         fun clickFromProjectTree(file: VirtualFile) {
+            endRestoring()
             syncInclusion()
             val item = inclusionItemOf(file) ?: return
             val path = pathOf(item) ?: return

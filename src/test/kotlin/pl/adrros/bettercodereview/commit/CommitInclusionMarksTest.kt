@@ -62,6 +62,7 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         tree.setSize(300, 120)
         tree.doLayout()
         tree.setIncludedChanges(listOf(changeA))
+        project.service<CommitTicks>().forget()
         CommitInclusionMarks.install(tree)
     }
 
@@ -69,6 +70,7 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         try {
             treeOrNull?.let { CommitInclusionMarks.uninstall(it) }
             project.service<CurrentReviewFile>().update(null as FilePath?)
+            project.service<CommitTicks>().forget()
             if (::defaultStampOf.isInitialized) CommitInclusionMarks.stampOf = defaultStampOf
             if (::defaultContentOf.isInitialized) CommitInclusionMarks.contentOf = defaultContentOf
         } finally {
@@ -111,6 +113,48 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         decision.onClick()
         tree.includeChange(change)
         overlay.syncInclusion()
+    }
+
+    fun `test a tick keeps the text it was given, for the diff since the tick`() {
+        contents[b] = "class B {}"
+        tickByClick(nodeB, changeB)
+        contents[b] = "class B { int x; }"
+        stamps[b] = CommitInclusionMarks.Stamp(-1, 2, 200)
+        assertTrue(overlay.isMarked(b))
+        assertEquals("class B {}", overlay.tickedText(b.path))
+        assertNull("A was ticked by the IDE, not by a click", overlay.tickedText(a.path))
+        tree.excludeChange(changeB)
+        overlay.syncInclusion()
+        assertNull("unticked: nothing to compare with", overlay.tickedText(b.path))
+    }
+
+    fun `test the ticks come back after a restart, over the IDE ticking everything`() {
+        contents[b] = "class B {}"
+        tickByClick(nodeB, changeB)
+        tree.excludeChange(changeA)
+        overlay.syncInclusion()
+        val saved = project.service<CommitTicks>().ticks!!
+        assertEquals(listOf(b.path), saved.map { it.path })
+        assertTrue("the tick keeps its content's digest", saved.single().digest.isNotEmpty())
+
+        CommitInclusionMarks.uninstall(tree)
+        contents[b] = "class B {}a"
+        stamps[b] = CommitInclusionMarks.Stamp(-1, 5, 500)
+        tree.setIncludedChanges(listOf(changeA, changeB))
+        CommitInclusionMarks.install(tree)
+        overlay.syncInclusion()
+        assertFalse("A was not ticked before the restart", tree.includedSet.contains(changeA))
+        assertTrue(tree.includedSet.contains(changeB))
+        assertTrue("B changed while the IDE was closed", overlay.isMarked(b))
+
+        tree.setIncludedChanges(listOf(changeA, changeB))
+        assertFalse("the IDE ticking everything again is undone", tree.includedSet.contains(changeA))
+
+        overlay.decide(slotCentre(nodeA))
+        tree.includeChange(changeA)
+        assertTrue("after the developer's first click the IDE's ticks stand", tree.includedSet.contains(changeA))
+        overlay.syncInclusion()
+        assertEquals(setOf(a.path, b.path), project.service<CommitTicks>().ticks!!.map { it.path }.toSet())
     }
 
     fun `test only a file ticked by a click gets a baseline and dashes when modified or deleted`() {
@@ -328,12 +372,37 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         assertEquals(ChangeLineStats.Lines(0, 0), BranchLineStats.parseNumstat(emptyList()))
     }
 
+    fun `test a stacked branch is counted from the branch below it, any other one from develop`() {
+        val refs = listOf(
+            "0 6\tZT-847\t",
+            "0 6\torigin/ZT-847\t",
+            "0 7\tZT-847-1-clean\t",
+            "0 10\tclaude/zt-847-merge-conflicts\t",
+            "0 10\tdevelop\t",
+            "1 10\torigin\trefs/remotes/origin/develop",
+            "1 10\torigin/develop\t",
+            "3 2\torigin/ZT-847-1\t",
+        )
+        assertEquals(BranchLineStats.Base("origin/ZT-847", "ZT-847"), BranchLineStats.pickBase(refs, "ZT-847-1"))
+        assertEquals(
+            "a tie goes to develop, then to its remote copy",
+            BranchLineStats.Base("origin/develop", "develop"),
+            BranchLineStats.pickBase(refs.filterNot { "ZT-847" in it }, "ZT-847-1"),
+        )
+        assertNull("branches holding HEAD are not bases", BranchLineStats.pickBase(listOf("2 0\tZT-847-2\t"), "ZT-847-1"))
+        assertEquals(
+            "a branch with no commits yet is counted from develop",
+            BranchLineStats.Base("origin/develop", "develop"),
+            BranchLineStats.pickBase(listOf("4 0\torigin/develop\t", "0 3\tZT-900\t", "2 0\tZT-901\t"), "ZT-902"),
+        )
+    }
+
     fun `test the Commit panel shows the branch's lines against develop after its top row`() {
         val stats = project.service<BranchLineStats>()
         val defaults = Pair(stats.compute, stats.onComputed)
         var computed = 0
         try {
-            stats.compute = { ChangeLineStats.Lines(858, 8) }
+            stats.compute = { BranchLineStats.Total("develop", ChangeLineStats.Lines(858, 8)) }
             stats.onComputed = { computed++ }
             render()
             com.intellij.testFramework.PlatformTestUtil.waitWithEventsDispatching("branch count", { computed > 0 }, 10)

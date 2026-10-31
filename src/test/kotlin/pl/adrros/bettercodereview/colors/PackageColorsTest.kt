@@ -8,15 +8,18 @@ import java.nio.file.Files
 class PackageColorsTest : BasePlatformTestCase() {
     private val base = "/work/zt-backend"
     private lateinit var defaultColorFor: (com.intellij.openapi.project.Project, com.intellij.openapi.vfs.VirtualFile) -> Color?
+    private lateinit var defaultColorOfPackage: (com.intellij.openapi.project.Project, String) -> Color?
 
     override fun setUp() {
         super.setUp()
         defaultColorFor = PackageLines.colorFor
+        defaultColorOfPackage = PackageLines.colorOfPackage
     }
 
     override fun tearDown() {
         try {
             PackageLines.colorFor = defaultColorFor
+            PackageLines.colorOfPackage = defaultColorOfPackage
         } finally {
             super.tearDown()
         }
@@ -134,6 +137,50 @@ class PackageColorsTest : BasePlatformTestCase() {
         PackageLines.tint(editor)
         assertNull(PackageLines.highlighterOf(editor))
         assertEmpty(editor.markupModel.allHighlighters.filter { it.getTextAttributes(null)?.backgroundColor == Color.RED })
+    }
+
+    fun `test a file in an uncoloured folder, like a test, takes its package's colour`() {
+        PackageLines.colorFor = { _, _ -> null }
+        val asked = mutableListOf<String>()
+        PackageLines.colorOfPackage = { _, name -> asked += name; Color.ORANGE }
+        myFixture.configureByText("ATest.java", "package org.alpha.adapter.chat;\n\nclass ATest {}\n")
+        PackageLines.tint(myFixture.editor)
+        assertEquals(listOf("org.alpha.adapter.chat"), asked)
+        assertEquals(Color.ORANGE, PackageLines.highlighterOf(myFixture.editor)!!.getTextAttributes(null)!!.backgroundColor)
+    }
+
+    fun `test a diff of a past revision tints its package line in the colour of the package's folder`() {
+        val asked = mutableListOf<String>()
+        PackageLines.colorOfPackage = { _, name -> asked += name; Color.ORANGE }
+        val document = com.intellij.openapi.editor.EditorFactory.getInstance().createDocument("/* header */\npackage org.alpha.`audit_log`.change;\n\nclass A {}\n")
+        val editor = com.intellij.openapi.editor.EditorFactory.getInstance().createViewer(document, project, com.intellij.openapi.editor.EditorKind.DIFF)
+        try {
+            assertEquals("tinted as soon as the diff creates the editor", listOf("org.alpha.audit_log.change"), asked)
+            val highlighter = PackageLines.highlighterOf(editor)!!
+            assertEquals(1, document.getLineNumber(highlighter.startOffset))
+            assertEquals(Color.ORANGE, highlighter.getTextAttributes(null)!!.backgroundColor)
+        } finally {
+            com.intellij.openapi.editor.EditorFactory.getInstance().releaseEditor(editor)
+        }
+    }
+
+    fun `test a package is coloured by its folder under the source roots`() {
+        val colors = project.service<PackageColors>()
+        val saved = colors.getState()
+        val dir = java.nio.file.Path.of(project.basePath!!, "src")
+        Files.createDirectories(dir.resolve("org/alpha/adapter"))
+        val root = com.intellij.openapi.vfs.LocalFileSystem.getInstance().refreshAndFindFileByNioFile(dir)!!
+        try {
+            com.intellij.testFramework.PsiTestUtil.addSourceRoot(module, root)
+            colors.loadState(PackageColors.ColorsState())
+            colors.assign(project.basePath!!, listOf("${root.path}/org/alpha/adapter"), colors.colors[2].id)
+            assertEquals(colors.colors[2].color, PackageLines.colorOfPackage(project, "org.alpha.adapter.persist"))
+            assertNull(PackageLines.colorOfPackage(project, "org.alpha.api"))
+        } finally {
+            com.intellij.testFramework.PsiTestUtil.removeSourceRoot(module, root)
+            colors.loadState(saved)
+            dir.toFile().deleteRecursively()
+        }
     }
 
     fun `test the Package Color menu has its name, or the IDE drops it from the menu`() {

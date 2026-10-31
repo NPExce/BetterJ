@@ -17,6 +17,7 @@ import com.intellij.util.xmlb.annotations.XCollection
 import java.awt.Color
 import java.nio.file.Files
 import java.nio.file.Path
+import pl.adrros.bettercodereview.settings.Feature
 
 private val LOG = logger<PackageColors>()
 
@@ -104,7 +105,7 @@ class PackageColors(private val project: Project) : PersistentStateComponent<Pac
     fun colorOf(file: VirtualFile): Color? = project.basePath?.let { colorOf(it, file.path) }
 
     fun colorOf(base: String, path: String): Color? {
-        if (byPath.isEmpty()) return null
+        if (byPath.isEmpty() || !Feature.PACKAGE_COLORS.isOn) return null
         var relative = relativePath(base, path) ?: return null
         while (true) {
             byPath[relative]?.let { id -> return palette.firstOrNull { it.id == id }?.color }
