@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.20.13 - 2026-11-01
+
+- Every ticked file in the Commit window dashes once it changes, also the ones the IDE ticked itself (after opening a
+  project, a restart or a new change). Their content is taken the first time the plugin sees them ticked; only files
+  ticked by a click used to get it.
+
 ## 0.20.12 - 2026-10-31
 
 - *Center Code on Window*: code pushed aside by a tool window on the left follows its edge at once, both ways,

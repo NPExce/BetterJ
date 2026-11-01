@@ -130,8 +130,7 @@ Plugin from Disk…*. Krok po kroku w [instrukcji instalacji](INSTALL.md). Obsł
    ponownego przejrzenia”; plik z kreską dalej wchodzi do commitu. Kliknięcie w plik z kreską odznacza go, a ponowne
    zaznaczenie bierze aktualną treść jako nową bazę. *Show Changes Since Tick* w menu kontekstowym okna Commit i
    drzewa projektu otwiera diff: treść z chwili zaznaczenia po lewej, obecna po prawej (dla zaznaczeń sprzed
-   restartu IDE zostaje sama kreska). Pliki zaznaczone przez IDE albo klawiaturą nie mają bazy, więc
-   same nie dostają kreski. Plik z zaznaczoną tylko częścią linii zostawia własny checkbox platformy.
+   restartu IDE zostaje sama kreska). Każdy plik z ptaszkiem, także zaznaczony przez IDE albo klawiaturą, zapamiętuje treść w chwili, gdy plugin pierwszy raz go zobaczy. Plik z zaznaczoną tylko częścią linii zostawia własny checkbox platformy.
    **Pamięć zaznaczeń:** ptaszki, kreski i treść z chwili zaznaczenia są zapisywane w pliku workspace projektu (nie
    trafia do repo). Po restarcie IDE przez pierwsze 30 sekund plugin cofa zaznaczanie wszystkiego przez IDE; Twoje
    pierwsze kliknięcie kończy ten czas. Plik zmieniony przy zamkniętym IDE dostaje kreskę. Commit (`⌘K`) zostawia

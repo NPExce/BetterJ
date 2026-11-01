@@ -194,9 +194,6 @@ object CommitInclusionMarks {
         /** The last comparison with the baseline per file, valid while the file's stamps stay the same. */
         private val verdicts = HashMap<FilePath, Pair<Stamp, Boolean>>()
 
-        /** Files whose tick came from a click on the checkbox; only they get a baseline. */
-        private val tickedByClick = HashSet<FilePath>()
-
         /** Files the developer clicked once more to mark for another look; they stay included. */
         private val flagged = HashSet<FilePath>()
 
@@ -313,7 +310,6 @@ object CommitInclusionMarks {
                 for ((path, item) in all) {
                     val tick = pending[path] ?: continue
                     val filePath = pathOf(item) ?: continue
-                    tickedByClick.add(filePath)
                     if (tick.flagged) flagged.add(filePath)
                     if (tick.digest.isNotEmpty()) baselines[filePath] = Baseline(UNKNOWN_STAMP, java.util.HexFormat.of().parseHex(tick.digest))
                 }
@@ -347,7 +343,10 @@ object CommitInclusionMarks {
             return items.orEmpty()
         }
 
-        /** Brings the baselines in line with what is ticked now: clicked ticks take a baseline, removed ticks drop it and the flag. */
+        /**
+         * Brings the baselines in line with what is ticked now: a file seen ticked for the first time takes its content
+         * as the baseline, whoever ticked it (a click, the IDE, the keyboard); removed ticks drop it and the flag.
+         */
         fun syncInclusion() {
             if (items == null) {
                 items = (tree.model.root as? ChangesBrowserNode<*>)?.traverseObjectsUnder()
@@ -359,8 +358,7 @@ object CommitInclusionMarks {
             baselines.keys.retainAll(included)
             verdicts.keys.retainAll(included)
             flagged.retainAll(included)
-            tickedByClick.retainAll(included)
-            for (path in tickedByClick) {
+            for (path in included) {
                 if (path !in baselines) stampOf(path)?.let { stamp ->
                     val text = contentOf(path)?.toString()
                     baselines[path] = Baseline(stamp, text?.let(::digestOf), text?.takeIf { it.length <= KEPT_TEXT_CHARS })
@@ -439,7 +437,6 @@ object CommitInclusionMarks {
             val state = tree.inclusionModel.getInclusionState(userObject)
             return when {
                 state == ThreeStateCheckBox.State.NOT_SELECTED -> CheckboxClicks.Decision(consume = false) {
-                    tickedByClick.add(filePath)
                     tree.repaint()
                 }
                 state == ThreeStateCheckBox.State.SELECTED && !isMarked(filePath) -> CheckboxClicks.Decision(consume = true) {
@@ -491,10 +488,7 @@ object CommitInclusionMarks {
             when (tickOf(file)) {
                 Tick.TICKED -> flagged.add(path)
                 Tick.MARKED -> tree.inclusionModel.removeInclusion(listOf(item))
-                Tick.NONE, Tick.PARTIAL -> {
-                    tree.inclusionModel.addInclusion(listOf(item))
-                    tickedByClick.add(path)
-                }
+                Tick.NONE, Tick.PARTIAL -> tree.inclusionModel.addInclusion(listOf(item))
                 null -> return
             }
             syncInclusion()

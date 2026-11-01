@@ -116,13 +116,14 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
     }
 
     fun `test a tick keeps the text it was given, for the diff since the tick`() {
+        contents[a] = "class A {}"
         contents[b] = "class B {}"
         tickByClick(nodeB, changeB)
         contents[b] = "class B { int x; }"
         stamps[b] = CommitInclusionMarks.Stamp(-1, 2, 200)
         assertTrue(overlay.isMarked(b))
         assertEquals("class B {}", overlay.tickedText(b.path))
-        assertNull("A was ticked by the IDE, not by a click", overlay.tickedText(a.path))
+        assertEquals("A, ticked by the IDE, keeps its text too", "class A {}", overlay.tickedText(a.path))
         tree.excludeChange(changeB)
         overlay.syncInclusion()
         assertNull("unticked: nothing to compare with", overlay.tickedText(b.path))
@@ -157,12 +158,12 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         assertEquals(setOf(a.path, b.path), project.service<CommitTicks>().ticks!!.map { it.path }.toSet())
     }
 
-    fun `test only a file ticked by a click gets a baseline and dashes when modified or deleted`() {
+    fun `test every ticked file gets a baseline when first seen and dashes when modified or deleted`() {
         tickByClick(nodeB, changeB)
         stamps[a] = CommitInclusionMarks.Stamp(-1, 2, 100)
         stamps[b] = CommitInclusionMarks.Stamp(-1, 2, 100)
         val image = render()
-        assertEquals("A was ticked before the plugin saw it: no baseline, no dash", 0, dashPixels(image, nodeA))
+        assertTrue("A was ticked by the IDE, seen ticked and changed since", dashPixels(image, nodeA) > 0)
         assertTrue("B was ticked by a click and changed since", dashPixels(image, nodeB) > 0)
         stamps.remove(b)
         assertTrue("a deleted file is the biggest change", overlay.isMarked(b))
