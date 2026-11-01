@@ -27,6 +27,7 @@ enum class Feature(private val key: String, private val default: Boolean) {
     LINE_COUNTS("BetterCodeReview.lineCounts", true),
     CURRENT_FILE("BetterCodeReview.currentFileMark", true),
     COMMIT_MARKS("BetterCodeReview.commitCheckboxMarks", true),
+    ONLY_MY_TICKS("BetterCodeReview.onlyMyTicks", true),
     VIEWED_CYCLE("BetterCodeReview.viewedCheckboxCycle", true),
     DOUBLE_CLICK_OPENS("BetterCodeReview.doubleClickOpensFile", true),
     PACKAGE_COLORS("BetterCodeReview.packageColors", true),

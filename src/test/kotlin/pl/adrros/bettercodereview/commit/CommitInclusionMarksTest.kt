@@ -42,8 +42,13 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         override fun getRevisionNumber(): VcsRevisionNumber = VcsRevisionNumber.NULL
     }
 
+    private var onlyMyTicks = true
+
     override fun setUp() {
         super.setUp()
+        onlyMyTicks = pl.adrros.bettercodereview.settings.Feature.ONLY_MY_TICKS.isOn
+        // The tests tick through the model, without a click; the feature that takes such ticks back has its own test.
+        pl.adrros.bettercodereview.settings.Feature.ONLY_MY_TICKS.isOn = false
         defaultStampOf = CommitInclusionMarks.stampOf
         CommitInclusionMarks.stampOf = { stamps[it] }
         defaultContentOf = CommitInclusionMarks.contentOf
@@ -73,6 +78,7 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
             project.service<CommitTicks>().forget()
             if (::defaultStampOf.isInitialized) CommitInclusionMarks.stampOf = defaultStampOf
             if (::defaultContentOf.isInitialized) CommitInclusionMarks.contentOf = defaultContentOf
+            pl.adrros.bettercodereview.settings.Feature.ONLY_MY_TICKS.isOn = onlyMyTicks
         } finally {
             super.tearDown()
         }
@@ -113,6 +119,23 @@ class CommitInclusionMarksTest : BasePlatformTestCase() {
         decision.onClick()
         tree.includeChange(change)
         overlay.syncInclusion()
+    }
+
+    fun `test with only my ticks a tick the IDE sets on its own is taken back and a clicked one stays`() {
+        pl.adrros.bettercodereview.settings.Feature.ONLY_MY_TICKS.isOn = true
+        render()
+        tree.includeChange(changeB)
+        assertFalse("the IDE ticked B on its own, outside any click", tree.includedSet.contains(changeB))
+        assertTrue("A, ticked before, stays", tree.includedSet.contains(changeA))
+
+        overlay.decide(slotCentre(nodeB))
+        tree.includeChange(changeB)
+        assertTrue("B ticked with a click", tree.includedSet.contains(changeB))
+
+        pl.adrros.bettercodereview.settings.Feature.ONLY_MY_TICKS.isOn = false
+        tree.excludeChange(changeB)
+        tree.includeChange(changeB)
+        assertTrue("switched off: the IDE's ticks stand", tree.includedSet.contains(changeB))
     }
 
     fun `test a tick keeps the text it was given, for the diff since the tick`() {

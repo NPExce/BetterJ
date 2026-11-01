@@ -47,6 +47,8 @@ Aktualna wersja: **<!-- version -->0.20.12<!-- /version -->** · [⬇ Pobierz pl
   z tym, co pokazuje GitHub.
 - **Zaznaczenie, któremu można ufać.** Plik zaznaczony do commitu dostaje kreskę `[-]`, gdy jego treść się zmieni,
   np. przez Ciebie albo agenta AI. Cofniesz zmianę, ptaszek wraca. Cykl kliknięć: `[ ] → [v] → [-] → [ ]`.
+- **Ptaszek stawiasz tylko Ty.** IntelliJ sam zaznacza nowe zmiany, np. nowy plik od agenta AI; BetterJ to cofa,
+  więc `[v]` zawsze znaczy „sprawdziłem”, a do commitu wchodzi tylko to, co zaznaczyłeś (*Only my ticks*).
 - **Zaznaczenia nie znikają.** `⌘K` nie zaznacza wszystkiego na nowo, a po restarcie IDE wracają Twoje ptaszki.
   Plik zmieniony przy zamkniętym IDE dostaje kreskę.
 - **Te same checkboxy w drzewie projektu**, przed ikoną zmienionego pliku.
@@ -130,7 +132,9 @@ Plugin from Disk…*. Krok po kroku w [instrukcji instalacji](INSTALL.md). Obsł
    ponownego przejrzenia”; plik z kreską dalej wchodzi do commitu. Kliknięcie w plik z kreską odznacza go, a ponowne
    zaznaczenie bierze aktualną treść jako nową bazę. *Show Changes Since Tick* w menu kontekstowym okna Commit i
    drzewa projektu otwiera diff: treść z chwili zaznaczenia po lewej, obecna po prawej (dla zaznaczeń sprzed
-   restartu IDE zostaje sama kreska). Każdy plik z ptaszkiem, także zaznaczony przez IDE albo klawiaturą, zapamiętuje treść w chwili, gdy plugin pierwszy raz go zobaczy. Plik z zaznaczoną tylko częścią linii zostawia własny checkbox platformy.
+   restartu IDE zostaje sama kreska). **Only my ticks** (domyślnie włączone): ptaszek, który IntelliJ stawia sam (nowa
+   zmiana na liście, np. plik od agenta AI), plugin od razu zdejmuje; zostają tylko ptaszki postawione kliknięciem,
+   klawiszem albo z menu. Każdy plik z ptaszkiem, także zaznaczony przez IDE albo klawiaturą, zapamiętuje treść w chwili, gdy plugin pierwszy raz go zobaczy. Plik z zaznaczoną tylko częścią linii zostawia własny checkbox platformy.
    **Pamięć zaznaczeń:** ptaszki, kreski i treść z chwili zaznaczenia są zapisywane w pliku workspace projektu (nie
    trafia do repo). Po restarcie IDE przez pierwsze 30 sekund plugin cofa zaznaczanie wszystkiego przez IDE; Twoje
    pierwsze kliknięcie kończy ten czas. Plik zmieniony przy zamkniętym IDE dostaje kreskę. Commit (`⌘K`) zostawia

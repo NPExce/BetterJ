@@ -202,9 +202,44 @@ object CommitInclusionMarks {
         private val inclusionListener = object : InclusionListener {
             override fun inclusionChanged() {
                 restoreTicks()
+                dropIdeTicks()
                 saveTicks()
                 ProjectTreeTicks.repaintAll()
             }
+        }
+
+        /** What the commit included after the last change, to tell what the IDE adds on its own. */
+        private var known: Set<Any>? = null
+
+        /** Files the developer just clicked to tick; the platform ticks them a moment after the click is decided. */
+        private val userTicks = HashSet<String>()
+        private var enforcing = false
+
+        /**
+         * With [Feature.ONLY_MY_TICKS], takes back the ticks the IDE sets on its own, such as a new change a coding agent
+         * made, so a tick always means the developer looked. A change made while a click or a key is handled is the
+         * developer's; the saved ticks put back after a restart and Commit (Cmd+K) keep their own handling.
+         */
+        private fun dropIdeTicks() {
+            val model = tree.inclusionModel
+            val before = known
+            val now = model.getInclusion()
+            val bySomeone = enforcing || restoring || pendingTicks != null || before == null ||
+                !Feature.ONLY_MY_TICKS.isOn || java.awt.EventQueue.getCurrentEvent() is java.awt.event.InputEvent
+            if (!bySomeone) {
+                val added = now.filter { it !in before!! && pathOf(it)?.path?.let { path -> path !in userTicks } == true }
+                if (added.isNotEmpty()) {
+                    enforcing = true
+                    try {
+                        model.removeInclusion(added)
+                    } finally {
+                        enforcing = false
+                    }
+                    LOG.info("Commit ticks: took back ${added.size} tick(s) the IDE set on its own")
+                }
+            }
+            userTicks.clear()
+            known = model.getInclusion().toSet()
         }
 
         private val savedTicks: CommitTicks get() = tree.project.service()
@@ -261,6 +296,7 @@ object CommitInclusionMarks {
                 }
             })
             restoreTicks()
+            known = tree.inclusionModel.getInclusion().toSet()
         }
 
         override fun removeNotify() {
@@ -436,8 +472,9 @@ object CommitInclusionMarks {
             syncInclusion()
             val state = tree.inclusionModel.getInclusionState(userObject)
             return when {
-                state == ThreeStateCheckBox.State.NOT_SELECTED -> CheckboxClicks.Decision(consume = false) {
-                    tree.repaint()
+                state == ThreeStateCheckBox.State.NOT_SELECTED -> {
+                    userTicks.add(filePath.path)
+                    CheckboxClicks.Decision(consume = false) { tree.repaint() }
                 }
                 state == ThreeStateCheckBox.State.SELECTED && !isMarked(filePath) -> CheckboxClicks.Decision(consume = true) {
                     // The consumed release skips the tree UI's own selection and focus handling.
@@ -488,7 +525,10 @@ object CommitInclusionMarks {
             when (tickOf(file)) {
                 Tick.TICKED -> flagged.add(path)
                 Tick.MARKED -> tree.inclusionModel.removeInclusion(listOf(item))
-                Tick.NONE, Tick.PARTIAL -> tree.inclusionModel.addInclusion(listOf(item))
+                Tick.NONE, Tick.PARTIAL -> {
+                    userTicks.add(path.path)
+                    tree.inclusionModel.addInclusion(listOf(item))
+                }
                 null -> return
             }
             syncInclusion()

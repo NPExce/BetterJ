@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.21.0 - 2026-11-01
+
+- *Only my ticks* (on by default, *Tools | BetterJ*): the Commit window keeps only the ticks you set. A change the IDE
+  would tick on its own, such as a new file a coding agent made, stays unticked until you look at it, so a tick always
+  means you checked the file and the commit holds only what you picked.
+
 ## 0.20.13 - 2026-11-01
 
 - Every ticked file in the Commit window dashes once it changes, also the ones the IDE ticked itself (after opening a
