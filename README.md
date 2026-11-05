@@ -4,7 +4,7 @@
 
 **Codzienne usprawnienia IntelliJ IDEA: review, commity, branche i pakiety, bez zgadywania.**
 
-Aktualna wersja: **<!-- version -->0.20.12<!-- /version -->** · [⬇ Pobierz plugin](dist/BetterJ-0.20.12.zip) ·
+Aktualna wersja: **<!-- version -->0.22.1<!-- /version -->** · [⬇ Pobierz plugin](dist/BetterJ-0.22.1.zip) ·
 [Instrukcja instalacji](INSTALL.md) · [Co nowego](CHANGELOG.md)
 
 <!-- Screenshot: docs/screenshots/overview.png -->
@@ -90,7 +90,7 @@ Anonymous usage count*.
 
 ## Instalacja
 
-Pobierz [BetterJ-0.20.12.zip](dist/BetterJ-0.20.12.zip) i zainstaluj z dysku: *Settings → Plugins → ⚙ → Install
+Pobierz [BetterJ-0.22.1.zip](dist/BetterJ-0.22.1.zip) i zainstaluj z dysku: *Settings → Plugins → ⚙ → Install
 Plugin from Disk…*. Krok po kroku w [instrukcji instalacji](INSTALL.md). Obsługiwane: IntelliJ IDEA 2026.1–2026.3.
 
 ## Wszystkie funkcje w szczegółach
