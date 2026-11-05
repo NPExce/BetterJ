@@ -14,12 +14,16 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.COLUMNS_SHORT
+import com.intellij.ui.dsl.builder.bindText
+import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import pl.adrros.bettercodereview.BetterCodeReviewBundle
 import pl.adrros.bettercodereview.colors.PackageColorsRefresher
 import pl.adrros.bettercodereview.commit.CommitInclusionMarks
 import pl.adrros.bettercodereview.commit.ProjectTreeTicks
 import pl.adrros.bettercodereview.editor.WindowCenteredCode
+import pl.adrros.bettercodereview.telemetry.UsagePing
 import java.awt.Window
 
 /** Every feature that can be switched off, with the key its setting has always been stored under. */
@@ -88,6 +92,12 @@ class FeaturesConfigurable : BoundConfigurable(BetterCodeReviewBundle.message("f
                     .comment(feature.description)
                     .bindSelected({ feature.isOn }, { Features.set(feature, it) })
             }
+        }
+        row(BetterCodeReviewBundle.message("telemetry.nick.label")) {
+            textField()
+                .columns(COLUMNS_SHORT)
+                .comment(BetterCodeReviewBundle.message("telemetry.nick.comment"))
+                .bindText({ UsagePing.nick }, { UsagePing.updateNick(it) })
         }
     }
 }

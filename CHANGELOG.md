@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.23.0 - 2026-11-05
+
+- An optional nick in *Settings | Tools | BetterJ*: sent with the daily usage count, so the author knows whom to tell
+  about new versions and whom to ask for ideas. Empty by default, seen only by the author; clearing it removes it from
+  the service at once.
+
 ## 0.22.1 - 2026-11-05
 
 - The usage count goes to the deployed service, `https://adrros-telemetry.adrros.workers.dev`.

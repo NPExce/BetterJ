@@ -88,6 +88,10 @@ i IntelliJ, żeby autor wiedział, ile osób używa pluginu. Nic więcej: bez na
 plików; serwis nie zapisuje adresu IP. Kod serwisu jest w [`telemetry/`](telemetry) (wspólny z BetterGitHub, każdy produkt liczony osobno). Wyłączysz w *Tools → BetterJ →
 Anonymous usage count*.
 
+Jeśli chcesz, żeby autor wiedział, że to Ty (i mógł napisać o nowej wersji albo zapytać o pomysły), wpisz nick w
+*Settings → Tools → BetterJ → Nick*. Pole jest domyślnie puste; nick widzi tylko autor, a wyczyszczenie pola usuwa go
+z serwisu.
+
 ## Instalacja
 
 Pobierz [BetterJ-0.22.1.zip](dist/BetterJ-0.22.1.zip) i zainstaluj z dysku: *Settings → Plugins → ⚙ → Install

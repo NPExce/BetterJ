@@ -8,3 +8,5 @@ local/
 out/
 telemetry/node_modules/
 telemetry/.wrangler/
+telemetry/.stats-key
+telemetry/.dev.vars
