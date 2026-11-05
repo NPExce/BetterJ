@@ -63,6 +63,9 @@ IntelliJ potrafi wyśrodkować kod (*Toggle Center View*), ale liczy środek edy
 się zwęża i kod ucieka w prawo. BetterJ liczy środek **całego okna**: kod zostaje tam, gdzie patrzysz, a boczne
 panele otwierają się obok niego. Gdy miejsca robi się za mało, kod przesuwa się tylko tyle, ile musi.
 
+Edytory podzielone obok siebie (dwa, trzy i więcej) pokazują kod na całej swojej szerokości, bez pasa; centrowanie
+działa dla edytora, który ma obszar edytorów dla siebie (także przy podziale góra–dół).
+
 Włączasz w *Tools → BetterJ → Center code on window* (domyślnie wyłączone).
 
 ## Kolory pakietów

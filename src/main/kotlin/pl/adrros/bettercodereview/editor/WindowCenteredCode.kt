@@ -131,6 +131,12 @@ object WindowCenteredCode {
         }
     }
 
+    /** The editor area holding every split of a window, found by its class to stay off the IDE's internal API. */
+    private const val EDITOR_AREA = "EditorsSplitters"
+
+    /** Narrower than this share of the editor area, an editor has another one beside it. */
+    private const val SPLIT_SHARE = 0.8
+
     private const val GLIDE_MS = 180L
     private const val FRAME_MS = 15
 
@@ -223,6 +229,11 @@ object WindowCenteredCode {
             val key = listOf(paneLeft, scrollPane.width, root.width, column, gutterWithoutPad, rightOfText, frame)
             if (key == lastKey) return px
             lastKey = key
+            if (isBesideAnotherEditor(scrollPane.width)) {
+                glide.jumpTo(paneLeft + gutterWithoutPad)
+                px = 0
+                return 0
+            }
             val textLeft = paneLeft + gutterWithoutPad + px
             val visible = scrollPane.width - gutterWithoutPad - px - rightOfText
             val target = targetTextLeft(root.width, textLeft, visible, column, px)
@@ -234,6 +245,16 @@ object WindowCenteredCode {
             }
             px = width
             return width
+        }
+
+        /**
+         * True in a split next to another editor: it then shows its code across its whole width. A split one above the
+         * other keeps the full width, so it stays centred.
+         */
+        private fun isBesideAnotherEditor(width: Int): Boolean {
+            val area = com.intellij.ui.ComponentUtil.findParentByCondition(editor.component) { it.javaClass.name.endsWith(EDITOR_AREA) }
+                ?: return false
+            return width < area.width * SPLIT_SHARE
         }
 
         /**

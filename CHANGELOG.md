@@ -2,6 +2,11 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.21.1 - 2026-11-05
+
+- *Center Code on Window* leaves editors split side by side alone: each shows its code across its whole width, with
+  no strip. An editor that has the editor area to itself, also in a split one above the other, stays centred.
+
 ## 0.21.0 - 2026-11-01
 
 - *Only my ticks* (on by default, *Tools | BetterJ*): the Commit window keeps only the ticks you set. A change the IDE
