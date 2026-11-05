@@ -31,8 +31,8 @@ class UsagePing : ProjectActivity {
     }
 
     companion object {
-        /** The telemetry service in the repository's `telemetry/` folder; empty until it is deployed. */
-        const val ENDPOINT = ""
+        /** The telemetry service in the repository's `telemetry/` folder. */
+        const val ENDPOINT = "https://adrros-telemetry.adrros.workers.dev/ping"
 
         private const val INSTALL_ID = "BetterCodeReview.telemetry.installId"
         private const val LAST_DAY = "BetterCodeReview.telemetry.lastDay"

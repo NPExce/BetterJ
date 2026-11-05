@@ -2,6 +2,10 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.22.1 - 2026-11-05
+
+- The usage count goes to the deployed service, `https://adrros-telemetry.adrros.workers.dev`.
+
 ## 0.22.0 - 2026-11-05
 
 - Anonymous usage count (*Tools | BetterJ*, on by default): once a day the plugin sends a random install id and the

@@ -11,7 +11,7 @@ class UsagePingTest : BasePlatformTestCase() {
         )
     }
 
-    fun `test nothing is sent from tests or before the service exists`() {
+    fun `test nothing is sent from tests`() {
         assertNull(UsagePing.dueBody(LocalDate.of(2026, 11, 5)))
     }
 }
