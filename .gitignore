@@ -6,3 +6,5 @@ build/
 .kotlin/
 local/
 out/
+telemetry/node_modules/
+telemetry/.wrangler/

@@ -32,6 +32,7 @@ enum class Feature(private val key: String, private val default: Boolean) {
     DOUBLE_CLICK_OPENS("BetterCodeReview.doubleClickOpensFile", true),
     PACKAGE_COLORS("BetterCodeReview.packageColors", true),
     CENTER_ON_WINDOW("BetterCodeReview.windowCenteredCode", false),
+    TELEMETRY("BetterCodeReview.telemetry", true),
     ;
 
     var isOn: Boolean

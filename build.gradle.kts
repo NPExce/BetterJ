@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "pl.adrros"
-version = "0.21.1"
+version = "0.22.0"
 
 repositories {
     mavenCentral()

@@ -81,6 +81,13 @@ zmienisz w *Settings → Tools → Package Colors*.
 *Tools → BetterJ* w pasku menu pokazuje wszystkie funkcje z ptaszkiem: kliknięcie włącza albo wyłącza. To samo, z
 opisem każdej funkcji, jest w *Settings → Tools → BetterJ* (wyszukiwarka Settings je znajduje).
 
+## Anonimowe zliczanie użytkowników
+
+Raz dziennie plugin wysyła losowy identyfikator instalacji (wygenerowany raz, niepowiązany z Tobą) oraz wersje BetterJ
+i IntelliJ, żeby autor wiedział, ile osób używa pluginu. Nic więcej: bez nazwy użytkownika, maila, nazw projektów i
+plików; serwis nie zapisuje adresu IP. Kod serwisu jest w [`telemetry/`](telemetry). Wyłączysz w *Tools → BetterJ →
+Anonymous usage count*.
+
 ## Instalacja
 
 Pobierz [BetterJ-0.20.12.zip](dist/BetterJ-0.20.12.zip) i zainstaluj z dysku: *Settings → Plugins → ⚙ → Install

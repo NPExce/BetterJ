@@ -57,6 +57,7 @@
 
         <postStartupActivity implementation="pl.adrros.bettercodereview.review.ReviewUiDecorationInstaller"/>
         <postStartupActivity implementation="pl.adrros.bettercodereview.colors.OtherColorPluginCheck"/>
+        <postStartupActivity implementation="pl.adrros.bettercodereview.telemetry.UsagePing"/>
 
         <editorFactoryListener implementation="pl.adrros.bettercodereview.review.ReviewCommentEditorListener"/>
 
