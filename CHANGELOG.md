@@ -5,7 +5,8 @@ What each version added. The newest is on top; the current one is also shown at 
 ## 0.22.0 - 2026-11-05
 
 - Anonymous usage count (*Tools | BetterJ*, on by default): once a day the plugin sends a random install id and the
-  BetterJ and IDE versions, so the author knows how many people use it. The service is in `telemetry/`.
+  BetterJ and IDE versions, so the author knows how many people use it. The service is in `telemetry/`, shared with
+  BetterGitHub and counting each product apart.
 
 ## 0.21.1 - 2026-11-05
 

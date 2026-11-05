@@ -53,6 +53,7 @@ class UsagePing : ProjectActivity {
         fun ownVersion(): String? = UsagePing::class.java.classLoader.getResource("META-INF/plugin.xml")?.readText()
             ?.let { Regex("<version>([^<]+)</version>").find(it)?.groupValues?.get(1)?.trim() }
 
-        fun body(id: String, version: String, ide: String): String = """{"id":"$id","version":"$version","ide":"$ide"}"""
+        fun body(id: String, version: String, ide: String): String =
+            """{"product":"betterj","id":"$id","version":"$version","ide":"$ide"}"""
     }
 }
