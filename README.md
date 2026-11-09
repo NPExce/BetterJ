@@ -17,6 +17,7 @@ Aktualna wersja: **<!-- version -->0.22.1<!-- /version -->** · [⬇ Pobierz plu
   zmieniło się od zaznaczenia.
 - Zapamiętuje zaznaczenia w oknie Commit, także po restarcie IDE i po `⌘K`.
 - Oznacza w PR-ze pliki do ponownego przeczytania i pliki z niewysłanymi komentarzami.
+- Działa też w merge requestach GitLaba: rozmiar zmian, cykl `[v]` / `[-]` / `[ ]`, szkice komentarzy, podwójny klik.
 - Wysyła review (Approve / Request Changes / Comment) prosto z IDE.
 - Kopiuje komentarze, wstawia emoji `:smile:`, wkleja zrzuty ekranu jako załączniki GitHuba.
 - Koloruje pakiety: drzewo projektu, drzewa zmian, zakładki edytora, linia `package` (też w diffie).
@@ -36,6 +37,11 @@ Aktualna wersja: **<!-- version -->0.22.1<!-- /version -->** · [⬇ Pobierz plu
   zatwierdził.
 - **Wygodniejsze komentarze.** Kopiowanie komentarza (`⌘C` albo przycisk), emoji przez `:smi` i okno wyboru,
   wklejanie zrzutów ekranu jako natywnych załączników GitHuba.
+
+**GitLab.** W merge requeście GitLaba drzewo plików dostaje to samo: rozmiar zmian, kreskę i cykl `[v]` → `[-]` → `[ ]`,
+licznik szkiców komentarzy i podwójny klik otwierający plik. GitLab zapamiętuje „viewed” tylko lokalnie w IDE, więc
+kreska dla pliku zmienionego po przeczytaniu działa na tym komputerze. Przycisk *Review…*, załączniki i reakcje są
+na razie tylko dla GitHuba.
 
 <!-- Screenshot: docs/screenshots/pull-request-tree.png -->
 <!-- Screenshot: docs/screenshots/comments.png -->
@@ -137,8 +143,9 @@ Plugin from Disk…*. Krok po kroku w [instrukcji instalacji](INSTALL.md). Obsł
    potrzeba przy czytaniu na wybranym branchu; Alt+podwójny klik i *Show Diff* otwierają diff jak dotąd. Gdy branch
    PR-a nie jest wybrany, otwiera się diff, a dymek mówi dlaczego (raz na drzewo). „Wybrany” dotyczy brancha, nie
    tego, czy kopia robocza równa się głowie PR-a: niepobrane commity albo lokalne zmiany mogą przesunąć komentarze
-   do linii. Dotyczy tylko drzewa całego PR-a z GitHuba: w drzewie pojedynczego commita i w merge requeście GitLaba
-   otwiera się diff.
+   do linii. Dotyczy drzewa całego PR-a z GitHuba i merge requesta z GitLaba (tam „wybrany” znaczy: bieżący branch
+   ma nazwę brancha źródłowego MR-a albo stoi na jego najnowszym commicie); w drzewie pojedynczego commita otwiera
+   się diff.
 9. **Okno Commit: które zaznaczone pliki się zmieniły** - plik zaznaczony kliknięciem w checkbox dostaje kreskę,
    gdy jego treść różni się od tej z chwili zaznaczenia: zmieniony w edytorze, nadpisany na dysku przez narzędzie
    (np. agenta AI) albo usunięty. Przywrócony do tamtej treści (dopisane „a” i usunięte) znowu ma ptaszek. Pliki
@@ -232,4 +239,6 @@ zgodność z 2026.1, 2026.2 i 2026.3.
 - Przycisk *Review…* jest rozpoznawany po kształcie wiersza akcji w szczegółach, który mają też merge requesty
   GitLaba; jest dodawany tylko tam, gdzie w kontekście jest PR z GitHuba. Wysyłanie review korzysta z modelu review
   pluginu GitHub przez jego wymienne okno, czyli wewnętrzne API.
+- Znaczniki w merge requestach czytają merge request z prywatnego pola modelu pluginu GitLab, a pamięć „viewed”
+  po nazwach metod. Gdy JetBrains to zmieni, znaczniki GitLaba po prostu znikną, a reszta pluginu działa dalej.
 - Reakcje na komentarze są ograniczone do ośmiu, na które pozwala GitHub; to limit API GitHuba, nie IDE.

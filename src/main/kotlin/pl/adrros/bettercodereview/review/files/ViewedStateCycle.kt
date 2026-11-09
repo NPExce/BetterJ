@@ -9,7 +9,6 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.util.ui.tree.TreeUtil
-import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
 import java.awt.Point
 import java.awt.event.MouseEvent
 import java.awt.event.MouseListener
@@ -91,26 +90,32 @@ object ViewedStateCycle {
         val slot = RowSlots.stateSlot(tree, path, row) ?: return null
         if (!slot.bounds.contains(point)) return null
         val ticked = slot.checked == true
-        val dismissed = overlay.viewedStateOf(relative) == GHPullRequestFileViewedState.DISMISSED
+        val dismissed = overlay.viewedStateOf(relative) == ViewedState.DISMISSED
         // The platform's toggle acts on the click, so the decision does too; each outcome also records what the
         // file is about to be, so a quick next click sees it before GitHub answers.
         val click = CheckboxClicks.Trigger.CLICK
         return when (step(ticked, dismissed, overlay.isFlagged(relative))) {
-            Step.NATIVE -> CheckboxClicks.Decision(consume = false, click) { overlay.assume(relative, GHPullRequestFileViewedState.VIEWED) }
+            Step.NATIVE -> CheckboxClicks.Decision(consume = false, click) { overlay.assume(relative, ViewedState.VIEWED) }
             Step.FLAG_AND_UNTICK -> CheckboxClicks.Decision(consume = false, click) {
                 overlay.setFlag(relative, true)
-                overlay.assume(relative, GHPullRequestFileViewedState.UNVIEWED)
+                overlay.assume(relative, ViewedState.UNVIEWED)
             }
             Step.CLEAR_TO_UNTICKED -> CheckboxClicks.Decision(consume = true, click) {
                 overlay.setFlag(relative, false)
                 if (ticked || dismissed) untick(tree, change)
-                overlay.assume(relative, GHPullRequestFileViewedState.UNVIEWED)
+                overlay.assume(relative, ViewedState.UNVIEWED)
             }
         }
     }
 
     private fun untick(tree: ChangesTree, change: RefComparisonChange) {
-        val model = ReviewChangeTrees.changeListModelOf(tree) as? CodeReviewChangeListViewModel.WithViewedState
+        val changeList = ReviewChangeTrees.changeListModelOf(tree)
+        val backend = changeList?.let(ReviewTreeBackend::forModel)
+        if (backend != null) {
+            backend.setViewedState(changeList, listOf(change), false)
+            return
+        }
+        val model = changeList as? CodeReviewChangeListViewModel.WithViewedState
         if (model == null) {
             LOG.info("Cannot untick ${change.filePathAfter ?: change.filePathBefore}: the change list model does not expose the viewed state")
             return

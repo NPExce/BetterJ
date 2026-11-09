@@ -26,6 +26,8 @@
                 the colour shows in the project tree, the change trees and the editor tabs, and as the background of the
                 package line of files inside, in the editor and in diffs. The palette is yours to edit in Settings | Tools | Package Colors; settings
                 of the ProjectTree Color Highlighter plugin (.idea/highlightedFiles.xml) are imported on first use.</li>
+            <li>GitLab merge requests get the same file tree marks: line counts, the viewed-checkbox cycle, files with draft
+                comments and double-click opening the file.</li>
             <li>Double-click or Enter on a file in the pull request's tree opens the file in the editor (the branch must be
                 checked out); Alt+double-click opens the diff as before. Switchable in the tree's context menu.</li>
             <li>Center Code on Window (View | Appearance): the code stays in the middle of the IDE window, not of the
@@ -37,6 +39,12 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.github</depends>
     <depends>Git4Idea</depends>
+    <depends optional="true" config-file="gitlab.xml">org.jetbrains.plugins.gitlab</depends>
+
+    <extensionPoints>
+        <extensionPoint qualifiedName="pl.adrros.bettercodereview.reviewTreeBackend"
+                        interface="pl.adrros.bettercodereview.review.files.ReviewTreeBackend" dynamic="true"/>
+    </extensionPoints>
 
     <resource-bundle>messages.BetterCodeReviewBundle</resource-bundle>
 

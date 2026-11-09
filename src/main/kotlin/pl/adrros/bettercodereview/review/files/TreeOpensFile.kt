@@ -154,10 +154,11 @@ object TreeOpensFile {
         if (tree.selectionCount != 1 || !tree.model.isLeaf(selection.lastPathComponent)) return false
         val change = VcsTreeModelData.exactlySelected(tree).iterateUserObjects(RefComparisonChange::class.java).toList().singleOrNull() ?: return false
         val path = change.filePathAfter ?: return false // deleted in the pull request: only the diff can show it
-        // Only the GitHub tree of the whole pull request: a GitLab tree has no such model, one commit's tree would show another version.
+        // Only the tree of the whole review: one commit's tree would show another version.
         val changeList = ReviewChangeTrees.changeListModelOf(tree) ?: return false
         if (!ReviewDataSource.isOnLatest(changeList)) return false
-        when (pullRequestBranch(tree)) {
+        val branch = ReviewTreeBackend.forModel(changeList)?.branchState(tree, changeList) ?: pullRequestBranch(tree)
+        when (branch) {
             BranchState.CHECKED_OUT -> {}
             BranchState.OTHER -> {
                 if (!handlers.hinted) {

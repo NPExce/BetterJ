@@ -1,0 +1,15 @@
+<!-- Loaded only when the GitLab plugin is enabled. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="pl.adrros.bettercodereview">
+        <reviewTreeBackend implementation="pl.adrros.bettercodereview.gitlab.GitLabTreeBackend"/>
+    </extensions>
+
+    <actions>
+        <reference ref="BetterCodeReview.TreeOpensFile">
+            <add-to-group group-id="GitLab.Merge.Request.Changes.Popup" anchor="last"/>
+        </reference>
+        <reference ref="BetterCodeReview.ViewedCheckboxCycle">
+            <add-to-group group-id="GitLab.Merge.Request.Changes.Popup" anchor="last"/>
+        </reference>
+    </actions>
+</idea-plugin>

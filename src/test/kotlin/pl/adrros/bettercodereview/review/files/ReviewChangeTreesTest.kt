@@ -289,7 +289,7 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
         overlay.pullRequestKey = "pr-test"
         val flags = project.service<ReviewFlags>()
         try {
-            overlay.viewedStates = mapOf("src/Flagged.java" to org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState.UNVIEWED)
+            overlay.viewedStates = mapOf("src/Flagged.java" to ViewedState.UNVIEWED)
             assertEquals("src/Flagged.java", overlay.relativePath(LocalFilePath("/repo/src/Flagged.java", false)))
             overlay.setFlag("src/Flagged.java", true)
             assertTrue(flags.isFlagged("pr-test", "src/Flagged.java"))
@@ -298,10 +298,10 @@ class ReviewChangeTreesTest : BasePlatformTestCase() {
             val row = ReviewChangeTrees.paintedRowBounds(tree, TreePath(flaggedNode.path))!!
             assertTrue("flagged file carries the dash", (row.x until minOf(row.x + row.width, image.width)).any { x -> (row.y until row.y + row.height).any { y -> (image.getRGB(x, y) and 0xFFFFFF) == dash } })
 
-            overlay.viewedStates = mapOf("src/Flagged.java" to org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState.VIEWED)
+            overlay.viewedStates = mapOf("src/Flagged.java" to ViewedState.VIEWED)
             assertFalse("ticked elsewhere: the flag is gone", flags.isFlagged("pr-test", "src/Flagged.java"))
             overlay.setFlag("src/Flagged.java", true)
-            overlay.viewedStates = mapOf("src/Flagged.java" to org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState.VIEWED)
+            overlay.viewedStates = mapOf("src/Flagged.java" to ViewedState.VIEWED)
             assertTrue("no transition, the flag stays", flags.isFlagged("pr-test", "src/Flagged.java"))
         } finally {
             flags.clear("pr-test", "src/Flagged.java")

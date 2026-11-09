@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.24.0 - 2026-11-09
+
+- GitLab merge requests get the file tree marks too: line counts on the top row, the viewed-checkbox cycle (tick,
+  dash, empty), a dash on files viewed before they changed, the count of draft comments and double-click opening the
+  file. They load only when the GitLab plugin is enabled.
+
 ## 0.23.0 - 2026-11-05
 
 - An optional nick in *Settings | Tools | BetterJ*: sent with the daily usage count, so the author knows whom to tell

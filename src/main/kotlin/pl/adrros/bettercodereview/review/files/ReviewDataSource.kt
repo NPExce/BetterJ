@@ -35,21 +35,22 @@ private val LOG = logger<ReviewDataSource>()
 class ReviewDataSource internal constructor(
     private val threads: Flow<List<GHPullRequestReviewThread>>,
     private val viewedStates: Flow<Map<String, GHPullRequestFileViewedState>>,
-    val repositoryRootPath: String,
-    /** Fetches the pull request's commits into the local repository, which reading their files from git needs. */
-    val ensureRevisionsFetched: suspend () -> Unit = {},
-) {
+    override val repositoryRootPath: String,
+    private val fetchRevisions: suspend () -> Unit = {},
+) : ReviewTreeSource {
     /** Repository-relative path of every pending comment, sorted. */
-    val pendingCommentPaths: Flow<List<String>>
+    override val pendingCommentPaths: Flow<List<String>>
         get() = threads.map(::pendingCommentPaths).distinctUntilChanged()
+
+    override suspend fun ensureRevisionsFetched() = fetchRevisions()
 
     /** Repository-relative paths of files viewed earlier and changed since (GitHub's DISMISSED state), sorted. */
     val dismissedPaths: Flow<List<String>>
         get() = viewedStates.map(::dismissedPaths).distinctUntilChanged()
 
     /** GitHub's viewed state per repository-relative path, as the plugin last loaded it. */
-    val viewedStateByPath: Flow<Map<String, GHPullRequestFileViewedState>>
-        get() = viewedStates.distinctUntilChanged()
+    override val viewedStateByPath: Flow<Map<String, ViewedState>>
+        get() = viewedStates.distinctUntilChanged().map { states -> states.mapValues { (_, state) -> viewedState(state) } }
 
     companion object {
         fun pendingCommentPaths(threads: List<GHPullRequestReviewThread>): List<String> =
@@ -57,6 +58,12 @@ class ReviewDataSource internal constructor(
 
         fun dismissedPaths(states: Map<String, GHPullRequestFileViewedState>): List<String> =
             states.filterValues { it == GHPullRequestFileViewedState.DISMISSED }.keys.sorted()
+
+        fun viewedState(state: GHPullRequestFileViewedState): ViewedState = when (state) {
+            GHPullRequestFileViewedState.VIEWED -> ViewedState.VIEWED
+            GHPullRequestFileViewedState.DISMISSED -> ViewedState.DISMISSED
+            else -> ViewedState.UNVIEWED
+        }
 
         /**
          * False only for a change list pinned to one commit. 2026.1 and 2026.2 say so through `isOnLatest()`;

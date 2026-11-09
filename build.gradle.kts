@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "pl.adrros"
-version = "0.23.0"
+version = "0.24.0"
 
 repositories {
     mavenCentral()
@@ -23,7 +23,7 @@ dependencies {
     intellijPlatform {
         val localIde = providers.gradleProperty("platformLocalPath").orNull?.takeIf { file(it).exists() }
         if (localIde != null) local(localIde) else intellijIdeaCommunity("2026.1")
-        bundledPlugins("org.jetbrains.plugins.github", "Git4Idea")
+        bundledPlugins("org.jetbrains.plugins.github", "org.jetbrains.plugins.gitlab", "Git4Idea")
         bundledModules("intellij.platform.collaborationTools")
         testFramework(TestFrameworkType.Platform)
     }

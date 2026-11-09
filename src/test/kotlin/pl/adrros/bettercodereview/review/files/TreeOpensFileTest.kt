@@ -43,7 +43,7 @@ class TreeOpensFileTest : BasePlatformTestCase() {
     private var tempDir: File? = null
     private lateinit var defaultBranchLookup: (javax.swing.JTree) -> TreeOpensFile.BranchState
     private lateinit var defaultHint: (ChangesTree, String) -> Unit
-    private lateinit var defaultChangeListLookup: (javax.swing.JTree) -> org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel?
+    private lateinit var defaultChangeListLookup: (javax.swing.JTree) -> Any?
     private var onLatest = true
 
     /** The data context is empty headless; a proxy stands in for the pull request's change list model. */

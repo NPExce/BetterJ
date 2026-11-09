@@ -23,7 +23,6 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.launchOnShow
 import com.intellij.util.ui.tree.TreeUtil
 import kotlinx.coroutines.Job
-import org.jetbrains.plugins.github.api.data.pullrequest.GHPullRequestFileViewedState
 import org.jetbrains.plugins.github.pullrequest.ui.details.model.GHPRChangeListViewModel
 import com.intellij.openapi.vcs.history.VcsRevisionNumber
 import git4idea.GitContentRevision
@@ -76,9 +75,10 @@ object ReviewChangeTrees {
         DataManager.getInstance().getDataContext(tree).getData(org.jetbrains.plugins.github.pullrequest.action.GHPRActionKeys.PULL_REQUEST_ID)?.number
     }
 
-    /** Finds the change list model above the tree; headless tests, whose data contexts are empty, replace it. */
-    var changeListModelOf: (JTree) -> GHPRChangeListViewModel? = { tree ->
+    /** Finds the change list model above the tree (GitHub's, else another service's); headless tests, whose data contexts are empty, replace it. */
+    var changeListModelOf: (JTree) -> Any? = { tree ->
         DataManager.getInstance().getDataContext(tree).getData(GHPRChangeListViewModel.DATA_KEY)
+            ?: ReviewTreeBackend.changeListModelOf(tree)
     }
 
     // A WeakHashMap-backed set: its iterator skips entries collected mid-iteration instead of throwing.
@@ -134,16 +134,18 @@ object ReviewChangeTrees {
             log("Tree marks off: the tree shows a single commit")
             return
         }
-        val source = ReviewDataSource.from(changeList)
+        val source: ReviewTreeSource? =
+            if (changeList is GHPRChangeListViewModel) ReviewDataSource.from(changeList)
+            else ReviewTreeBackend.forModel(changeList)?.sourceOf(changeList)
         if (source == null) {
             log("Tree marks off: the change list model has no reachable data provider (details at DEBUG level)")
             return
         }
         log("Tree marks following pull request data under ${source.repositoryRootPath}")
         overlay.repositoryRootPath = source.repositoryRootPath
-        val number = pullRequestNumberOf(tree)
-        if (number == null) log("Viewed checkbox cycle off: no pull request id in the tree's data context") // GitHub's state still gets its dash
-        overlay.pullRequestKey = number?.let { "${source.repositoryRootPath}#$it" }
+        val key = source.reviewKey ?: pullRequestNumberOf(tree)?.let { "${source.repositoryRootPath}#$it" }
+        if (key == null) log("Viewed checkbox cycle off: no review id in the tree's data context") // the service's own state still gets its dash
+        overlay.pullRequestKey = key
         // Each collector fails on its own: a GitHub plugin change breaking one mark must not take the other down.
         launch {
             collectMarks("pending comments") {
@@ -165,7 +167,7 @@ object ReviewChangeTrees {
         launch {
             collectMarks("viewed-then-changed files") {
                 source.viewedStateByPath.collect {
-                    if (LOG.isDebugEnabled) LOG.debug("Viewed states loaded for ${it.size} file(s), ${ReviewDataSource.dismissedPaths(it).size} viewed-then-changed")
+                    if (LOG.isDebugEnabled) LOG.debug("Viewed states loaded for ${it.size} file(s), ${it.count { (_, state) -> state == ViewedState.DISMISSED }} viewed-then-changed")
                     overlay.viewedStates = it
                 }
             }
@@ -267,27 +269,28 @@ object ReviewChangeTrees {
         }
 
         /** What a click just made the file, before GitHub confirms it; no flag is cleared on this path. */
-        fun assume(relativePath: String, state: GHPullRequestFileViewedState) {
+        fun assume(relativePath: String, state: ViewedState) {
             viewedStatesField = viewedStatesField + (relativePath to state)
             refreshDismissed()
             repaint()
         }
 
-        private var viewedStatesField: Map<String, GHPullRequestFileViewedState> = emptyMap()
+        private var viewedStatesField: Map<String, ViewedState> = emptyMap()
 
         private fun refreshDismissed() {
-            dismissed = repositoryRootPath?.let { PendingMarks.of(it, ReviewDataSource.dismissedPaths(viewedStatesField)) } ?: PendingMarks.NONE
+            val paths = viewedStatesField.filterValues { it == ViewedState.DISMISSED }.keys.sorted()
+            dismissed = repositoryRootPath?.let { PendingMarks.of(it, paths) } ?: PendingMarks.NONE
         }
 
         /** GitHub's viewed state per repository-relative path; a transition into "viewed" takes the reviewer's flag off. */
-        var viewedStates: Map<String, GHPullRequestFileViewedState>
+        var viewedStates: Map<String, ViewedState>
             get() = viewedStatesField
             set(value) {
                 val before = viewedStatesField
                 viewedStatesField = value
                 if (pullRequestKey != null) {
                     for ((path, state) in value) {
-                        if (state == GHPullRequestFileViewedState.VIEWED && before[path] != state && isFlagged(path)) setFlag(path, false)
+                        if (state == ViewedState.VIEWED && before[path] != state && isFlagged(path)) setFlag(path, false)
                     }
                 }
                 refreshDismissed()
@@ -295,7 +298,7 @@ object ReviewChangeTrees {
 
         fun relativePath(path: FilePath): String? = repositoryRootPath?.let { FileUtil.getRelativePath(it, path.path, '/') }
 
-        fun viewedStateOf(relativePath: String): GHPullRequestFileViewedState? = viewedStates[relativePath]
+        fun viewedStateOf(relativePath: String): ViewedState? = viewedStates[relativePath]
 
         fun isFlagged(relativePath: String): Boolean {
             val key = pullRequestKey ?: return false
