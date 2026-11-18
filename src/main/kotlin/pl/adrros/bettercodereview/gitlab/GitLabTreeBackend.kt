@@ -1,12 +1,15 @@
 package pl.adrros.bettercodereview.gitlab
 
+import com.intellij.collaboration.ui.codereview.CodeReviewProgressTreeModelFromDetails
 import com.intellij.collaboration.ui.codereview.details.model.CodeReviewChangeListViewModel
+import com.intellij.collaboration.ui.codereview.setupCodeReviewProgressModel
 import com.intellij.collaboration.util.RefComparisonChange
 import com.intellij.ide.DataManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
 import com.intellij.openapi.vfs.VirtualFile
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -61,6 +64,37 @@ class GitLabTreeBackend : ReviewTreeBackend {
         val onBranch = branch != null && branch == mergeRequest.details.value.sourceBranch
         if (onBranch || (head != null && head == newest)) BranchState.CHECKED_OUT else BranchState.OTHER
     } ?: BranchState.UNKNOWN
+
+    /**
+     * IntelliJ 2026.1 and 2026.2 draw the merge request's tree without viewed checkboxes: the shared tree shows them only
+     * for a model of the shared "with viewed state" type, which GitLab's model becomes in 2026.3 (IJPL-251277), although
+     * it can already set the state. The tree is set up again, by the IDE's own code, around a model of that type.
+     */
+    override fun addViewedCheckboxes(tree: ChangesTree, changeList: Any, scope: CoroutineScope): (() -> Unit)? {
+        if (changeList is CodeReviewChangeListViewModel.WithViewedState) return null
+        val model = changeList as? GitLabMergeRequestChangeListViewModel ?: return null
+        if (!ReviewDataSource.isOnLatest(model)) return null // a single commit's tree shows no read marks
+        return guarded("Viewed checkboxes not added") {
+            val withViewedState = WithViewedStateModel(model) { changes, viewed -> setViewedState(model, changes, viewed) }
+            val listeners = tree.mouseListeners.toSet()
+            val renderer = tree.cellRenderer
+            tree.setupCodeReviewProgressModel(withViewedState, CodeReviewProgressTreeModelFromDetails(scope, withViewedState))
+            val added = tree.mouseListeners.filter { it !in listeners }
+            val remove = {
+                added.forEach(tree::removeMouseListener)
+                tree.cellRenderer = renderer
+                tree.repaint()
+            }
+            remove
+        }
+    }
+
+    private class WithViewedStateModel(
+        private val model: GitLabMergeRequestChangeListViewModel,
+        private val setter: (List<RefComparisonChange>, Boolean) -> Unit,
+    ) : CodeReviewChangeListViewModel.WithViewedState, CodeReviewChangeListViewModel.WithDetails by model {
+        override fun setViewedState(changes: Iterable<RefComparisonChange>, viewed: Boolean) = setter(changes.toList(), viewed)
+    }
 
     private fun mergeRequestOf(model: GitLabMergeRequestChangeListViewModel): GitLabMergeRequest =
         ReviewDataSource.privateField(model, "mergeRequest") as GitLabMergeRequest

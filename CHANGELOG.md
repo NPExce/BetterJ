@@ -2,6 +2,12 @@
 
 What each version added. The newest is on top; the current one is also shown at the top of the [README](README.md).
 
+## 0.24.1 - 2026-11-18
+
+- GitLab merge requests get viewed checkboxes in IntelliJ 2026.1 and 2026.2 too. The GitLab plugin added them only in
+  2026.3 (IJPL-251277); BetterJ sets the tree up with the IDE's own checkboxes around the same viewed state, so ticking
+  a file there is what *Mark as Viewed* does. The tick, dash, empty cycle works on them.
+
 ## 0.24.0 - 2026-11-09
 
 - GitLab merge requests get the file tree marks too: line counts on the top row, the viewed-checkbox cycle (tick,

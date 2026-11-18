@@ -3,6 +3,7 @@ package pl.adrros.bettercodereview.review.files
 import com.intellij.collaboration.util.RefComparisonChange
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.vcs.changes.ui.ChangesTree
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import javax.swing.JTree
 
@@ -41,6 +42,9 @@ interface ReviewTreeBackend {
     fun setViewedState(changeList: Any, changes: List<RefComparisonChange>, viewed: Boolean)
 
     fun branchState(tree: ChangesTree, changeList: Any): TreeOpensFile.BranchState
+
+    /** Shows viewed checkboxes on a tree the IDE draws without them, for as long as [scope] lives; returns how to take them off. */
+    fun addViewedCheckboxes(tree: ChangesTree, changeList: Any, scope: CoroutineScope): (() -> Unit)? = null
 
     companion object {
         val EP: ExtensionPointName<ReviewTreeBackend> = ExtensionPointName.create("pl.adrros.bettercodereview.reviewTreeBackend")

@@ -39,7 +39,8 @@ Aktualna wersja: **<!-- version -->0.24.0<!-- /version -->** · [⬇ Pobierz plu
   wklejanie zrzutów ekranu jako natywnych załączników GitHuba.
 
 **GitLab.** W merge requeście GitLaba drzewo plików dostaje to samo: rozmiar zmian, kreskę i cykl `[v]` → `[-]` → `[ ]`,
-licznik szkiców komentarzy i podwójny klik otwierający plik. GitLab zapamiętuje „viewed” tylko lokalnie w IDE, więc
+licznik szkiców komentarzy i podwójny klik otwierający plik. Checkboxy „viewed” plugin GitLab ma dopiero od IntelliJ
+2026.3; w 2026.1 i 2026.2 dokłada je BetterJ (te same co w 2026.3, zapisują to samo co *Mark as Viewed*). GitLab zapamiętuje „viewed” tylko lokalnie w IDE, więc
 kreska dla pliku zmienionego po przeczytaniu działa na tym komputerze. Przycisk *Review…*, załączniki i reakcje są
 na razie tylko dla GitHuba.
 

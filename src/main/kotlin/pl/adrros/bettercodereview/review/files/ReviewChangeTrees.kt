@@ -142,6 +142,22 @@ object ReviewChangeTrees {
             return
         }
         log("Tree marks following pull request data under ${source.repositoryRootPath}")
+        ReviewTreeBackend.forModel(changeList)?.addViewedCheckboxes(tree, changeList, this)?.let { removeCheckboxes ->
+            log("Viewed checkboxes added: the IDE draws this tree without them")
+            val cycleAdded = !overlay.cycleInstalled && ViewedStateCycle.install(tree, overlay)
+            if (cycleAdded) overlay.cycleInstalled = true
+            launch {
+                try {
+                    kotlinx.coroutines.awaitCancellation()
+                } finally {
+                    if (cycleAdded) {
+                        ViewedStateCycle.uninstall(tree)
+                        overlay.cycleInstalled = false
+                    }
+                    removeCheckboxes()
+                }
+            }
+        }
         overlay.repositoryRootPath = source.repositoryRootPath
         val key = source.reviewKey ?: pullRequestNumberOf(tree)?.let { "${source.repositoryRootPath}#$it" }
         if (key == null) log("Viewed checkbox cycle off: no review id in the tree's data context") // the service's own state still gets its dash
